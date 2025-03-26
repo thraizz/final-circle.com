@@ -314,8 +314,9 @@ export class PlayerControls {
   }
 
   private handleShot(shot: ShotInfo): void {
-    // Create a target position by extending the shot direction
-    const target = new THREE.Vector3().copy(shot.direction).multiplyScalar(100).add(shot.origin);
+    // Create a target position by extending the shot direction, using a smaller scale
+    // Use a reasonable range that works with server's hit detection (2.5 units threshold)
+    const target = new THREE.Vector3().copy(shot.direction).multiplyScalar(5).add(shot.origin);
     
     // Send the shot to the server
     this.onAction({

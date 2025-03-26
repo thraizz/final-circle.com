@@ -259,8 +259,20 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 	// Simple distance-based hit detection
 	shooter := sm.state.Players[shooterId]
+	hitRegistered := false
 
 	log.Printf("Processing shot from player %s", shooterId)
+	log.Printf("Shot target position: (%.2f, %.2f, %.2f)", target.X, target.Y, target.Z)
+	log.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
+
+	// Log how many potential targets we're checking
+	playerCount := 0
+	for id, player := range sm.state.Players {
+		if id != shooterId && player.IsAlive {
+			playerCount++
+		}
+	}
+	log.Printf("Checking shot against %d potential targets", playerCount)
 
 	// Check all players to see if they were hit
 	for id, player := range sm.state.Players {
@@ -280,8 +292,11 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 		dz := player.Position.Z - target.Z
 		distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
 
-		// If the shot hit (within 1 unit of the player)
-		if distance < 1.0 {
+		log.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance to shot: %.2f",
+			id, player.Position.X, player.Position.Y, player.Position.Z, distance)
+
+		// If the shot hit (within 2.5 units of the player)
+		if distance < 2.5 {
 			oldHealth := player.Health
 
 			// Reduce health
@@ -289,6 +304,8 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 
 			log.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
 				shooterId, id, oldHealth, player.Health, distance)
+
+			hitRegistered = true
 
 			// Check if player died
 			if player.Health <= 0 {
@@ -322,7 +339,15 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 			}
 
 			break // Only hit one player
+		} else {
+			log.Printf("Shot missed player %s - distance %.2f > hit threshold 2.5", id, distance)
 		}
+	}
+
+	if !hitRegistered {
+		log.Printf("Summary: Shot from player %s did not hit any targets", shooterId)
+	} else {
+		log.Printf("Summary: Shot from player %s registered a hit", shooterId)
 	}
 }
 

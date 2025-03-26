@@ -8,6 +8,7 @@ export interface HUDConfig {
   showWeaponInfo: boolean;
   showGameTime: boolean;
   showPlayerCount: boolean;
+  showCrosshair: boolean;
 }
 
 export class HUD {
@@ -18,6 +19,7 @@ export class HUD {
   private weaponDisplay: HTMLDivElement;
   private gameTimeDisplay: HTMLDivElement;
   private playerCountDisplay: HTMLDivElement;
+  private crosshairDisplay: HTMLDivElement;
   private lobbyOverlay: HTMLDivElement;
   private connectionStatusDisplay: HTMLDivElement;
   private errorMessageDisplay: HTMLDivElement;
@@ -35,6 +37,7 @@ export class HUD {
       showWeaponInfo: true,
       showGameTime: true,
       showPlayerCount: true,
+      showCrosshair: true,
       ...config
     };
     
@@ -53,6 +56,17 @@ export class HUD {
     this.weaponDisplay = this.createHUDElement('weapon', 'Weapon: None');
     this.gameTimeDisplay = this.createHUDElement('game-time', 'Time: 00:00');
     this.playerCountDisplay = this.createHUDElement('player-count', 'Players: 0');
+    
+    // Create crosshair
+    this.crosshairDisplay = document.createElement('div');
+    this.crosshairDisplay.className = 'crosshair';
+    
+    // Create center dot
+    const centerDot = document.createElement('div');
+    centerDot.className = 'crosshair-dot';
+    this.crosshairDisplay.appendChild(centerDot);
+    
+    document.body.appendChild(this.crosshairDisplay);
     
     // Create connection status and error message displays
     this.connectionStatusDisplay = this.createHUDElement('connection-status', '');
@@ -116,6 +130,51 @@ export class HUD {
         text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
         backdrop-filter: blur(2px);
         transition: opacity 0.2s ease;
+      }
+      
+      .crosshair {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        z-index: 1000;
+        pointer-events: none;
+        --crosshair-color: rgba(255, 255, 255, 0.9);
+      }
+      
+      .crosshair::before,
+      .crosshair::after {
+        content: '';
+        position: absolute;
+        background-color: var(--crosshair-color);
+        box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+      }
+      
+      .crosshair::before {
+        width: 14px;
+        height: 2px;
+        top: 9px;
+        left: 3px;
+      }
+      
+      .crosshair::after {
+        width: 2px;
+        height: 14px;
+        top: 3px;
+        left: 9px;
+      }
+      
+      .crosshair-dot {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background-color: var(--crosshair-color);
+        border-radius: 50%;
+        top: 8px;
+        left: 8px;
+        box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
       }
       
       .hud-element.health {
@@ -260,6 +319,7 @@ export class HUD {
     this.weaponDisplay.style.display = this.config.showWeaponInfo ? 'block' : 'none';
     this.gameTimeDisplay.style.display = this.config.showGameTime ? 'block' : 'none';
     this.playerCountDisplay.style.display = this.config.showPlayerCount ? 'block' : 'none';
+    this.crosshairDisplay.style.display = this.config.showCrosshair ? 'block' : 'none';
   }
   
   public updateConfig(config: Partial<HUDConfig>): void {
@@ -361,6 +421,9 @@ export class HUD {
         const accuracyPct = Math.round(weaponState.currentAccuracy * 100);
         this.weaponDisplay.textContent = `${weapon.name}${aimingText} | Accuracy: ${accuracyPct}%`;
       }
+      
+      // Update crosshair color based on aiming state
+      this.updateCrosshairForAiming(weaponState.isAiming);
     } else {
       if (this.config.showAmmo) {
         this.ammoDisplay.textContent = 'Ammo: --/--';
@@ -369,6 +432,27 @@ export class HUD {
       if (this.config.showWeaponInfo) {
         this.weaponDisplay.textContent = 'Weapon: None';
       }
+      
+      // Reset crosshair color
+      this.updateCrosshairForAiming(false);
+    }
+  }
+  
+  /**
+   * Updates the crosshair appearance based on aiming state
+   */
+  private updateCrosshairForAiming(isAiming: boolean): void {
+    if (!this.config.showCrosshair) return;
+    
+    const color = isAiming ? 'rgba(255, 50, 50, 0.9)' : 'rgba(255, 255, 255, 0.9)';
+    
+    // Update the pseudoelements by updating a custom property
+    this.crosshairDisplay.style.setProperty('--crosshair-color', color);
+    
+    // Update the center dot directly
+    const centerDot = this.crosshairDisplay.querySelector('.crosshair-dot');
+    if (centerDot) {
+      (centerDot as HTMLElement).style.backgroundColor = color;
     }
   }
   
@@ -507,6 +591,10 @@ export class HUD {
     
     if (this.lobbyOverlay && this.lobbyOverlay.parentNode) {
       this.lobbyOverlay.parentNode.removeChild(this.lobbyOverlay);
+    }
+    
+    if (this.crosshairDisplay && this.crosshairDisplay.parentNode) {
+      this.crosshairDisplay.parentNode.removeChild(this.crosshairDisplay);
     }
     
     // Clear any pending timeouts

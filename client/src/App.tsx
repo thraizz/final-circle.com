@@ -16,6 +16,7 @@ function App() {
     showWeaponInfo: true,
     showGameTime: true,
     showPlayerCount: true,
+    showCrosshair: true,
   })
 
   const handleLogin = (name: string) => {
@@ -110,6 +111,9 @@ function App() {
         </button>
         <button onClick={() => toggleHUDElement('showPlayerCount')}>
           {hudConfig.showPlayerCount ? 'Hide Player Count' : 'Show Player Count'}
+        </button>
+        <button onClick={() => toggleHUDElement('showCrosshair')}>
+          {hudConfig.showCrosshair ? 'Hide Crosshair' : 'Show Crosshair'}
         </button>
       </div>
 

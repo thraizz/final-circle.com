@@ -206,8 +206,6 @@ func (gs *GameServer) handleMessage(client *WebsocketClient, message []byte) {
 		return
 	}
 
-	log.Printf("Received message type '%s' from client %s", msgType, client.ID)
-
 	switch msgType {
 	case "setName":
 		displayName, ok := payload["displayName"].(string)
