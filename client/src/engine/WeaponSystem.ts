@@ -19,72 +19,72 @@ export class WeaponSystem {
   private static readonly WEAPONS: Record<WeaponType, WeaponStats> = {
     RIFLE: {
       damage: 25,
-      fireRate: 10,
-      reloadTime: 2.5,
+      fireRate: 8,
       magazineSize: 30,
+      reloadTime: 2.5,
+      accuracy: 0.8,
+      movementAccuracyPenalty: 0.2,
       recoilPattern: [
-        new THREE.Vector3(0, 0.1, 0),
-        new THREE.Vector3(0.02, 0.15, 0),
-        new THREE.Vector3(-0.03, 0.2, 0),
-        new THREE.Vector3(0.04, 0.25, 0),
-        new THREE.Vector3(-0.05, 0.3, 0),
+        new THREE.Vector3(0.005, 0.01, 0),
+        new THREE.Vector3(0.01, 0.015, 0),
+        new THREE.Vector3(0.015, 0.02, 0),
+        new THREE.Vector3(0.02, 0.025, 0),
+        new THREE.Vector3(0.01, 0.02, 0),
       ],
-      recoilRecoverySpeed: 0.8,
-      accuracy: 0.95,
-      movementAccuracyPenalty: 0.3,
+      recoilRecoverySpeed: 0.9,
       range: 100,
       bulletSpeed: 400,
     },
     SMG: {
-      damage: 18,
-      fireRate: 15,
-      reloadTime: 2.0,
+      damage: 15,
+      fireRate: 12,
       magazineSize: 25,
+      reloadTime: 1.8,
+      accuracy: 0.7,
+      movementAccuracyPenalty: 0.1,
       recoilPattern: [
-        new THREE.Vector3(0, 0.05, 0),
-        new THREE.Vector3(0.01, 0.08, 0),
-        new THREE.Vector3(-0.02, 0.1, 0),
-        new THREE.Vector3(0.02, 0.12, 0),
+        new THREE.Vector3(0.003, 0.006, 0),
+        new THREE.Vector3(0.005, 0.01, 0),
+        new THREE.Vector3(0.008, 0.012, 0),
+        new THREE.Vector3(0.01, 0.015, 0),
       ],
-      recoilRecoverySpeed: 0.9,
-      accuracy: 0.85,
-      movementAccuracyPenalty: 0.2,
+      recoilRecoverySpeed: 1.2,
       range: 50,
       bulletSpeed: 350,
     },
     PISTOL: {
-      damage: 35,
+      damage: 20,
       fireRate: 5,
-      reloadTime: 1.5,
       magazineSize: 12,
+      reloadTime: 1.5,
+      accuracy: 0.85,
+      movementAccuracyPenalty: 0.1,
       recoilPattern: [
-        new THREE.Vector3(0, 0.15, 0),
-        new THREE.Vector3(0, 0.2, 0),
+        new THREE.Vector3(0.01, 0.02, 0),
+        new THREE.Vector3(0.02, 0.03, 0),
       ],
-      recoilRecoverySpeed: 0.95,
-      accuracy: 0.9,
-      movementAccuracyPenalty: 0.15,
+      recoilRecoverySpeed: 1.0,
       range: 40,
       bulletSpeed: 300,
     },
     SNIPER: {
-      damage: 120,
-      fireRate: 1.5,
-      reloadTime: 3.5,
+      damage: 100,
+      fireRate: 1,
       magazineSize: 5,
+      reloadTime: 3,
+      accuracy: 0.95,
+      movementAccuracyPenalty: 0.4,
       recoilPattern: [
-        new THREE.Vector3(0, 0.5, 0),
+        new THREE.Vector3(0.02, 0.03, 0),
+        new THREE.Vector3(0.03, 0.04, 0),
       ],
-      recoilRecoverySpeed: 0.7,
-      accuracy: 1.0,
-      movementAccuracyPenalty: 0.5,
+      recoilRecoverySpeed: 0.8,
       range: 200,
       bulletSpeed: 500,
     },
   };
 
   private reloadTimeout: number | null = null;
-  private lastFrameTime: number = 0;
   private isMoving: boolean = false;
   private weaponMesh: THREE.Mesh | null = null;
 
@@ -97,7 +97,6 @@ export class WeaponSystem {
       isAiming: false,
       currentAccuracy: 1.0,
     };
-    this.lastFrameTime = performance.now();
   }
 
   public equipWeapon(type: WeaponType, name: string): void {
@@ -222,13 +221,20 @@ export class WeaponSystem {
       this.currentWeapon.stats.magazineSize - this.currentWeapon.currentAmmo
     );
     const recoil = this.currentWeapon.stats.recoilPattern[recoilIndex];
-    this.weaponState.currentRecoil.add(recoil);
+    
+    // Apply recoil with more visual effect but less impact on actual aim
+    // Use a fraction of the recoil for actual aiming, full amount for visual
+    const visualRecoil = recoil.clone();
+    const aimRecoil = recoil.clone().multiplyScalar(0.4); // Only 40% of recoil affects actual aim
+    
+    // Track the actual aim impact separately
+    this.weaponState.currentRecoil.add(aimRecoil);
 
-    // Apply recoil to camera using quaternions
-    WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.xAxis, recoil.y);
+    // Apply visual recoil to camera using quaternions
+    WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.xAxis, visualRecoil.y);
     this.camera.quaternion.multiply(WeaponSystem.tempQuaternion);
     
-    WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.yAxis, recoil.x);
+    WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.yAxis, visualRecoil.x);
     this.camera.quaternion.multiply(WeaponSystem.tempQuaternion);
     
     // Update Euler angles to match quaternion
@@ -244,10 +250,13 @@ export class WeaponSystem {
 
     // Calculate shot direction using reusable vectors
     WeaponSystem.tempDirection.copy(WeaponSystem.FORWARD);
+    
+    // Apply the camera's current rotation including recoil effects
+    // This ensures the shot direction matches what the player sees
     WeaponSystem.tempDirection.applyQuaternion(this.camera.quaternion);
     
-    // Add spread based on accuracy
-    const spread = (1 - this.weaponState.currentAccuracy) * 0.1;
+    // Add spread based on accuracy (reduced to make aiming more reliable)
+    const spread = (1 - this.weaponState.currentAccuracy) * 0.07;
     WeaponSystem.tempDirection.x += (Math.random() - 0.5) * spread;
     WeaponSystem.tempDirection.y += (Math.random() - 0.5) * spread;
     WeaponSystem.tempDirection.normalize();
@@ -297,12 +306,18 @@ export class WeaponSystem {
     // Update recoil recovery
     if (this.currentWeapon && this.weaponState.currentRecoil.length() > 0) {
       const recovery = this.currentWeapon.stats.recoilRecoverySpeed * deltaTime;
+      
+      // Track previous recoil for recovery calculation
+      const previousRecoil = this.weaponState.currentRecoil.clone();
+      
+      // Reduce current recoil
       this.weaponState.currentRecoil.multiplyScalar(Math.max(0, 1 - recovery));
 
-      // Apply recoil recovery to camera using quaternions
-      const yRecovery = this.weaponState.currentRecoil.y * recovery * 0.5;
-      const xRecovery = this.weaponState.currentRecoil.x * recovery * 0.5;
+      // Calculate the actual recovery amount
+      const yRecovery = previousRecoil.y - this.weaponState.currentRecoil.y;
+      const xRecovery = previousRecoil.x - this.weaponState.currentRecoil.x;
       
+      // Apply recoil recovery to camera at 1:1 ratio for consistent feel
       if (Math.abs(yRecovery) > 0.0001 || Math.abs(xRecovery) > 0.0001) {
         WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.xAxis, -yRecovery);
         this.camera.quaternion.multiply(WeaponSystem.tempQuaternion);

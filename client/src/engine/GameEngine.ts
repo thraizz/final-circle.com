@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BACKEND } from '../config';
 import { ErrorMessage, GameState, PlayerAction } from '../types/game';
 import { GameMap } from './GameMap';
 import { HUD, HUDConfig } from './HUD';
@@ -23,7 +24,7 @@ export class GameEngine {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private connectionReady: boolean = false;
-  private socketReconnecting: boolean = false;
+  public socketReconnecting: boolean = false;
   private pingInterval: number | null = null;
 
   constructor(hudConfig?: Partial<HUDConfig>, playerName: string = 'Player') {
@@ -128,7 +129,7 @@ export class GameEngine {
   }
 
   private setupWebSocket(): void {
-    const wsURL = "ws://localhost:8080/ws";
+    const wsURL = BACKEND.WS_URL;
     console.log(`Attempting WebSocket connection to: ${wsURL}`);
     
     this.socket = new WebSocket(wsURL);

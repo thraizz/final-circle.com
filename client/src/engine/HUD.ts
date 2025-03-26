@@ -30,7 +30,6 @@ export class HUD {
   private lastFrameTime: number;
   private errorMessageTimeout: number | null = null;
   private lowHealthAnimationId: number | null = null;
-  private lastHealthValue: number = 100;
   
   constructor(config?: Partial<HUDConfig>) {
     // Default configuration
@@ -490,8 +489,6 @@ export class HUD {
         this.stopLowHealthEffect();
       }
     }
-    
-    this.lastHealthValue = health;
   }
   
   private showDeathOverlay(show: boolean): void {

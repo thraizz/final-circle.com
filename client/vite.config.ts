@@ -1,8 +1,6 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// Determine if we're in production (can be set by build commands or environment)
-const isProd = false // Set to true when building for production
 
 // https://vitejs.dev/config/
 export default defineConfig({

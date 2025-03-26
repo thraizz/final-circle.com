@@ -42,9 +42,6 @@ export class PlayerControls {
   private static readonly obstacleBox = new THREE.Box3();
   private static readonly rotationVector = new THREE.Vector3();
   private static readonly rotationEuler = new THREE.Euler();
-  private static readonly rotationQuaternion = new THREE.Quaternion();
-  private static readonly xAxis = new THREE.Vector3(1, 0, 0);
-  private static readonly yAxis = new THREE.Vector3(0, 1, 0);
 
   // Bound event handlers
   private boundKeyDown: (event: KeyboardEvent) => void;
@@ -134,9 +131,6 @@ export class PlayerControls {
     console.error('Pointer lock error');
   }
 
-  private getRotationAsVector3(rotation: THREE.Euler): Vector3 {
-    return PlayerControls.rotationVector.set(rotation.x, rotation.y, rotation.z);
-  }
 
   // Add a helper method to get camera rotation as Vector3
   private getCameraRotationAsVector3(): Vector3 {
@@ -314,10 +308,8 @@ export class PlayerControls {
   }
 
   private handleShot(shot: ShotInfo): void {
-    // Instead of sending a distant target, send the shooter position and direction
-    // The server will handle raycasting properly
-    
-    // Send the shot to the server
+    // Use the actual direction from shot info which includes recoil effects
+    // instead of relying on camera rotation which may not match
     this.onAction({
       type: 'shoot',
       data: {
