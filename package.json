@@ -1,0 +1,14 @@
+{
+  "name": "last-circle",
+  "version": "1.0.0",
+  "description": "Last Circle game",
+  "main": "index.js",
+  "scripts": {
+    "client": "cd client && npm run dev",
+    "server": "cd server && go run main.go",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+} 

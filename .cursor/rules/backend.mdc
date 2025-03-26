@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Our backend must be typed properly and we should always keep maintainabity in mind.
