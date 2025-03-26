@@ -6,8 +6,10 @@ import { WeaponSystem } from './WeaponSystem';
 
 export class PlayerControls {
   private moveSpeed: number = 5;
+  private sprintSpeed: number = 10;
   private jumpForce: number = 10;
   private isJumping: boolean = false;
+  private isSprinting: boolean = false;
   private velocity: Vector3 = new THREE.Vector3();
   private moveForward: boolean = false;
   private moveBackward: boolean = false;
@@ -24,6 +26,14 @@ export class PlayerControls {
   private isMoving: boolean = false;
   private lastPosition: THREE.Vector3 = new THREE.Vector3();
   private controlsEnabled: boolean = false;
+  
+  // Lean properties
+  private isLeaningLeft: boolean = false;
+  private isLeaningRight: boolean = false;
+  private currentLean: number = 0; // 0 = center, -1 = left, 1 = right
+  private maxLeanAngle: number = Math.PI / 12; // 15 degrees
+  private maxLeanOffset: number = 0.5; // 0.5 units horizontal offset
+  private leanSpeed: number = 5; // Speed of lean transition
 
   // Reusable objects for performance
   private static readonly moveDirection = new THREE.Vector3();
@@ -149,6 +159,16 @@ export class PlayerControls {
       case 'KeyD':
         this.moveRight = true;
         break;
+      case 'KeyQ':
+        this.isLeaningLeft = true;
+        break;
+      case 'KeyE':
+        this.isLeaningRight = true;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        this.isSprinting = true;
+        break;
       case 'Space':
         if (this.canJump) {
           this.isJumping = true;
@@ -195,6 +215,16 @@ export class PlayerControls {
         break;
       case 'KeyD':
         this.moveRight = false;
+        break;
+      case 'KeyQ':
+        this.isLeaningLeft = false;
+        break;
+      case 'KeyE':
+        this.isLeaningRight = false;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        this.isSprinting = false;
         break;
       case 'Space':
         this.isJumping = false;
@@ -308,6 +338,9 @@ export class PlayerControls {
     // Store previous position
     this.lastPosition.copy(this.player.position);
     
+    // Update leaning
+    this.updateLean(deltaTime);
+    
     // Calculate movement direction
     PlayerControls.moveDirection.set(0, 0, 0);
     
@@ -343,9 +376,10 @@ export class PlayerControls {
       this.weaponSystem.setMoving(this.isMoving);
     }
     
-    // Apply movement to velocity
-    this.velocity.x = PlayerControls.moveDirection.x * this.moveSpeed;
-    this.velocity.z = PlayerControls.moveDirection.z * this.moveSpeed;
+    // Apply movement to velocity - use sprint speed if sprinting
+    const currentSpeed = this.isSprinting ? this.sprintSpeed : this.moveSpeed;
+    this.velocity.x = PlayerControls.moveDirection.x * currentSpeed;
+    this.velocity.z = PlayerControls.moveDirection.z * currentSpeed;
     
     // Apply jumping
     if (this.isJumping && this.canJump) {
@@ -376,10 +410,16 @@ export class PlayerControls {
       // Update camera position to match player position
       // The camera should be positioned at eye level
       this.camera.position.set(
-        this.player.position.x,
+        this.player.position.x + this.maxLeanOffset * this.currentLean,
         this.player.position.y + this.playerHeight * 0.8, // Eye level
         this.player.position.z
       );
+      
+      // Apply camera roll based on lean
+      const leanRoll = -this.currentLean * this.maxLeanAngle;
+      const euler = new THREE.Euler(this.cameraRotation.x, this.cameraRotation.y, leanRoll, 'YXZ');
+      this.camera.quaternion.setFromEuler(euler);
+      this.camera.rotation.copy(euler);
       
       // Notify about position change if significant
       if (this.lastPosition.distanceToSquared(this.player.position) > 0.001) {
@@ -448,5 +488,35 @@ export class PlayerControls {
 
   public getWeaponSystem(): WeaponSystem {
     return this.weaponSystem;
+  }
+
+  // Add this new method for leaning
+  private updateLean(deltaTime: number): void {
+    // Determine target lean value
+    let targetLean = 0;
+    
+    if (this.isLeaningLeft && !this.isLeaningRight) {
+      targetLean = -1;
+    } else if (this.isLeaningRight && !this.isLeaningLeft) {
+      targetLean = 1;
+    }
+    
+    // Smoothly transition to target lean
+    if (this.currentLean !== targetLean) {
+      if (this.currentLean < targetLean) {
+        this.currentLean = Math.min(targetLean, this.currentLean + this.leanSpeed * deltaTime);
+      } else {
+        this.currentLean = Math.max(targetLean, this.currentLean - this.leanSpeed * deltaTime);
+      }
+      
+      // Notify about leaning
+      this.onAction({
+        type: 'move',
+        data: {
+          lean: this.currentLean,
+          rotation: this.getCameraRotationAsVector3(),
+        },
+      });
+    }
   }
 } 

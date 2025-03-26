@@ -26,6 +26,7 @@ export interface PlayerActionData {
   target?: Vector3;
   direction?: Vector3;
   weaponId?: string;
+  lean?: number;
 }
 
 export type PlayerActionType = 'move' | 'jump' | 'shoot' | 'reload' | 'switchWeapon';
