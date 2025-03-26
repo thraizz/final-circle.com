@@ -99,3 +99,90 @@ The game is designed with performance as a primary consideration:
 - Minimal network payload for multiplayer
 
 See the [client README](client/README.md) and [server README](server/README.md) for more detailed information about each component.
+
+## Testing and Optimization Framework
+
+This project includes comprehensive testing and optimization tools for both client and server components:
+
+### Client Testing
+
+- Unit tests for components and game logic
+- Performance benchmarks for critical systems
+- Network simulation for testing under various conditions
+
+### Server Testing
+
+- Unit tests for server components
+- Performance benchmarks for game state management
+- Load testing for simulating multiple concurrent players
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 16+
+- Go 1.16+
+- Git
+
+### Setup
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/last-circle.git
+cd last-circle
+```
+
+2. Set up the testing environment:
+
+```bash
+./setup-testing.sh
+```
+
+3. Start the development server:
+
+```bash
+# Start server (in one terminal)
+cd server
+go run main.go
+
+# Start client (in another terminal)
+cd client
+npm install
+npm run dev
+```
+
+### Running Tests
+
+To run all tests:
+
+```bash
+./run-tests.sh all
+```
+
+For more specific test runs:
+
+```bash
+# Run only client tests
+./run-tests.sh client
+
+# Run only server tests
+./run-tests.sh server
+
+# Skip load tests
+./run-tests.sh all --skip-load
+
+# Skip performance tests
+./run-tests.sh all --skip-performance
+```
+
+## Documentation
+
+For detailed information about the testing frameworks:
+
+- [Client Testing Documentation](client/src/tests/README.md)
+- [Server Testing Documentation](server/tests/README.md)
+
+## License
+
+[License details here]
