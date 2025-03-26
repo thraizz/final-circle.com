@@ -1,4 +1,4 @@
-module lastcircle/server
+module finalcircle/server
 
 go 1.22
 

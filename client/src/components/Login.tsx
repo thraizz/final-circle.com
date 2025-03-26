@@ -5,76 +5,76 @@ const BANNED_WORDS = ['fuck', 'shit', 'ass', 'bitch', 'dick', 'penis', 'vagina']
 
 // Simple profanity check function
 const containsProfanity = (text: string): boolean => {
-    const lowerText = text.toLowerCase();
-    return BANNED_WORDS.some(word => lowerText.includes(word));
+  const lowerText = text.toLowerCase();
+  return BANNED_WORDS.some(word => lowerText.includes(word));
 };
 
 interface LoginProps {
-    onLogin: (playerName: string) => void;
+  onLogin: (playerName: string) => void;
 }
 
 export function Login({ onLogin }: LoginProps) {
-    const [playerName, setPlayerName] = useState('');
-    const [error, setError] = useState<string | null>(null);
+  const [playerName, setPlayerName] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-    const handleSubmit = (e: FormEvent) => {
-        e.preventDefault();
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
 
-        // Validate name length
-        if (!playerName.trim()) {
-            setError('Please enter a name');
-            return;
-        }
+    // Validate name length
+    if (!playerName.trim()) {
+      setError('Please enter a name');
+      return;
+    }
 
-        if (playerName.length < 3) {
-            setError('Name must be at least 3 characters');
-            return;
-        }
+    if (playerName.length < 3) {
+      setError('Name must be at least 3 characters');
+      return;
+    }
 
-        if (playerName.length > 15) {
-            setError('Name must be 15 characters or less');
-            return;
-        }
+    if (playerName.length > 15) {
+      setError('Name must be 15 characters or less');
+      return;
+    }
 
-        // Validate no profanity
-        if (containsProfanity(playerName)) {
-            setError('Please choose an appropriate name');
-            return;
-        }
+    // Validate no profanity
+    if (containsProfanity(playerName)) {
+      setError('Please choose an appropriate name');
+      return;
+    }
 
-        // All validation passed
-        onLogin(playerName);
-    };
+    // All validation passed
+    onLogin(playerName);
+  };
 
-    return (
-        <div className="login-container">
-            <div className="login-box">
-                <h1 className="game-title">Last Circle</h1>
-                <h2 className="login-subtitle">Enter the arena</h2>
+  return (
+    <div className="login-container">
+      <div className="login-box">
+        <h1 className="game-title">Final Circle</h1>
+        <h2 className="login-subtitle">Enter the arena</h2>
 
-                <form onSubmit={handleSubmit}>
-                    <div className="input-group">
-                        <label htmlFor="playerName">Your Name:</label>
-                        <input
-                            type="text"
-                            id="playerName"
-                            value={playerName}
-                            onChange={(e) => setPlayerName(e.target.value)}
-                            placeholder="Enter your name"
-                            autoFocus
-                        />
-                    </div>
+        <form onSubmit={handleSubmit}>
+          <div className="input-group">
+            <label htmlFor="playerName">Your Name:</label>
+            <input
+              type="text"
+              id="playerName"
+              value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name"
+              autoFocus
+            />
+          </div>
 
-                    {error && <div className="error-message">{error}</div>}
+          {error && <div className="error-message">{error}</div>}
 
-                    <button type="submit" className="login-button">
-                        Join Game
-                    </button>
-                </form>
-            </div>
+          <button type="submit" className="login-button">
+            Join Game
+          </button>
+        </form>
+      </div>
 
-            <style>
-                {`
+      <style>
+        {`
         .login-container {
           display: flex;
           justify-content: center;
@@ -173,7 +173,7 @@ export function Login({ onLogin }: LoginProps) {
           transform: translateY(1px);
         }
         `}
-            </style>
-        </div>
-    );
+      </style>
+    </div>
+  );
 } 

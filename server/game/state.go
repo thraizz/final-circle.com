@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"lastcircle/server/types"
+	"finalcircle/server/types"
 )
 
 // StateManager handles the game state and player management

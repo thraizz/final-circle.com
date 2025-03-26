@@ -1,6 +1,6 @@
-# Last Circle Backend Deployment Scripts
+# Final Circle Backend Deployment Scripts
 
-These scripts help deploy and manage the Last Circle backend on your remote server.
+These scripts help deploy and manage the Final Circle backend on your remote server.
 
 ## Requirements
 
@@ -65,13 +65,13 @@ If you need to restart the server manually, SSH into the server and run:
 
 ```bash
 # For system-level systemd:
-sudo systemctl restart lastcircle.service
+sudo systemctl restart finalcircle.service
 
 # For user-level systemd:
-systemctl --user restart lastcircle.service
+systemctl --user restart finalcircle.service
 
 # For standalone mode:
-cd /home/hkdebiandocker/last-circle
+cd /home/hkdebiandocker/final-circle
 ./start-server.sh
 ```
 
@@ -81,11 +81,11 @@ To view server logs:
 
 ```bash
 # For system-level systemd:
-sudo journalctl -u lastcircle.service
+sudo journalctl -u finalcircle.service
 
 # For user-level systemd:
-journalctl --user -u lastcircle.service
+journalctl --user -u finalcircle.service
 
 # For standalone mode:
-cat /home/hkdebiandocker/last-circle/lastcircle.log
+cat /home/hkdebiandocker/final-circle/finalcircle.log
 ```

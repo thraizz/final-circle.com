@@ -3,10 +3,10 @@
 # Configuration
 REMOTE_USER="hkdebiandocker"
 REMOTE_HOST="192.168.178.24"
-REMOTE_DIR="/home/hkdebiandocker/last-circle"
+REMOTE_DIR="/home/hkdebiandocker/final-circle"
 APP_PORT=8000
 
-echo "===== Last Circle Backend Status Check ====="
+echo "===== Final Circle Backend Status Check ====="
 
 # Check if we can connect to the server
 if ssh -q $REMOTE_USER@$REMOTE_HOST exit; then
@@ -18,7 +18,7 @@ fi
 
 # Check if the process is running
 echo "Checking if server process is running..."
-SSH_RESULT=$(ssh $REMOTE_USER@$REMOTE_HOST "pgrep -f last-circle-server >/dev/null && echo 'running' || echo 'not running'")
+SSH_RESULT=$(ssh $REMOTE_USER@$REMOTE_HOST "pgrep -f final-circle-server >/dev/null && echo 'running' || echo 'not running'")
 
 if [ "$SSH_RESULT" = "running" ]; then
   echo "✓ Server process is running"
@@ -28,8 +28,8 @@ fi
 
 # Check all possible service configurations
 echo "Checking service status..."
-SSH_SYSTEM_SERVICE=$(ssh $REMOTE_USER@$REMOTE_HOST "command -v systemctl >/dev/null 2>&1 && sudo -n systemctl is-active lastcircle.service 2>/dev/null || echo 'not found'")
-SSH_USER_SERVICE=$(ssh $REMOTE_USER@$REMOTE_HOST "command -v systemctl >/dev/null 2>&1 && systemctl --user is-active lastcircle.service 2>/dev/null || echo 'not found'")
+SSH_SYSTEM_SERVICE=$(ssh $REMOTE_USER@$REMOTE_HOST "command -v systemctl >/dev/null 2>&1 && sudo -n systemctl is-active finalcircle.service 2>/dev/null || echo 'not found'")
+SSH_USER_SERVICE=$(ssh $REMOTE_USER@$REMOTE_HOST "command -v systemctl >/dev/null 2>&1 && systemctl --user is-active finalcircle.service 2>/dev/null || echo 'not found'")
 SSH_STARTUP_SCRIPT=$(ssh $REMOTE_USER@$REMOTE_HOST "[ -f $REMOTE_DIR/start-server.sh ] && echo 'exists' || echo 'not found'")
 
 if [ "$SSH_SYSTEM_SERVICE" = "active" ]; then
@@ -67,8 +67,8 @@ fi
 
 # Check server log if available
 echo "Checking server logs (last 5 lines)..."
-ssh $REMOTE_USER@$REMOTE_HOST "if [ -f $REMOTE_DIR/lastcircle.log ]; then 
-  tail -n 5 $REMOTE_DIR/lastcircle.log | sed 's/^/  /'; 
+ssh $REMOTE_USER@$REMOTE_HOST "if [ -f $REMOTE_DIR/finalcircle.log ]; then 
+  tail -n 5 $REMOTE_DIR/finalcircle.log | sed 's/^/  /'; 
 else 
   echo '  No log file found'; 
 fi"

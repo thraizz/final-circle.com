@@ -1,2 +1,3 @@
-last-circle-server
+final-circle-server
 .env
+static/*.pem

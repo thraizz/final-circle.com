@@ -1,7 +1,7 @@
 {
-  "name": "last-circle",
-  "version": "1.0.0",
-  "description": "Last Circle game",
+  "name": "final-circle",
+  "version": "0.1.0",
+  "description": "Final Circle game",
   "main": "index.js",
   "scripts": {
     "client": "cd client && npm run dev",

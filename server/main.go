@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"lastcircle/server/game"
-	"lastcircle/server/types"
+	"finalcircle/server/game"
+	"finalcircle/server/types"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -415,7 +415,12 @@ func main() {
 		port = "8080"
 	}
 
-	log.Printf("Server starting on :%s", port)
+	// Check for TLS cert and key path environment variables
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+	useTLS := certFile != "" && keyFile != ""
+
+	log.Printf("Server starting on :%s (TLS: %v)", port, useTLS)
 
 	gs, err := newGameServer()
 	if err != nil {
@@ -431,10 +436,12 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", gs.handleWebSocket)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Health check received")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Status request received")
 		gs.clientsMu.RLock()
 		clientCount := len(gs.clients)
 		gs.clientsMu.RUnlock()
@@ -454,6 +461,7 @@ func main() {
 
 	// API endpoints for game control
 	mux.HandleFunc("/api/game/start", func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("API request to start game received")
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -510,8 +518,18 @@ func main() {
 	}
 
 	log.Printf("HTTP server listening on :%s", port)
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+
+	// Use TLS if cert and key files are provided
+	if useTLS {
+		log.Printf("Starting server with TLS using cert: %s and key: %s", certFile, keyFile)
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			log.Fatalf("Failed to start TLS server: %v", err)
+		}
+	} else {
+		log.Printf("Starting server without TLS")
+		if err := server.ListenAndServe(); err != nil {
+			log.Fatalf("Failed to start server: %v", err)
+		}
 	}
 }
 
