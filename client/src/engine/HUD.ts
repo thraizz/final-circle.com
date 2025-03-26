@@ -23,10 +23,14 @@ export class HUD {
   private lobbyOverlay: HTMLDivElement;
   private connectionStatusDisplay: HTMLDivElement;
   private errorMessageDisplay: HTMLDivElement;
+  private deathOverlay: HTMLDivElement;
+  private lowHealthOverlay: HTMLDivElement;
   private config: HUDConfig;
   private frames: number[];
   private lastFrameTime: number;
   private errorMessageTimeout: number | null = null;
+  private lowHealthAnimationId: number | null = null;
+  private lastHealthValue: number = 100;
   
   constructor(config?: Partial<HUDConfig>) {
     // Default configuration
@@ -74,6 +78,19 @@ export class HUD {
     
     this.errorMessageDisplay = this.createHUDElement('error-message', '');
     this.errorMessageDisplay.style.display = 'none';
+    
+    // Create death overlay
+    this.deathOverlay = document.createElement('div');
+    this.deathOverlay.className = 'death-overlay';
+    this.deathOverlay.innerHTML = '<div class="death-message">YOU DIED</div>';
+    this.deathOverlay.style.display = 'none';
+    document.body.appendChild(this.deathOverlay);
+    
+    // Create low health overlay
+    this.lowHealthOverlay = document.createElement('div');
+    this.lowHealthOverlay.className = 'low-health-overlay';
+    this.lowHealthOverlay.style.display = 'none';
+    document.body.appendChild(this.lowHealthOverlay);
     
     // Lobby overlay setup
     this.lobbyOverlay = document.createElement('div');
@@ -300,6 +317,60 @@ export class HUD {
       .player-status-dead {
         color: #cc3333;
       }
+      
+      .death-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(139, 0, 0, 0.4);
+        z-index: 2000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        pointer-events: none;
+      }
+      
+      .death-message {
+        font-family: 'Arial', sans-serif;
+        font-size: 72px;
+        font-weight: bold;
+        color: #ff0000;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+        animation: pulse 2s infinite;
+      }
+      
+      .low-health-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 0, 0, 0);
+        pointer-events: none;
+        z-index: 1500;
+        box-shadow: inset 0 0 100px rgba(255, 0, 0, 0.5);
+        border: 0px solid rgba(255, 0, 0, 0);
+        border-width: 0 0 100vh 100vw;
+        border-radius: 50%;
+        box-sizing: border-box;
+      }
+      
+      @keyframes pulse {
+        0% {
+          opacity: 0.8;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+        100% {
+          opacity: 0.8;
+          transform: scale(1);
+        }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -403,6 +474,69 @@ export class HUD {
       this.healthDisplay.style.color = 'rgb(255, 255, 0)';
     } else {
       this.healthDisplay.style.color = 'rgb(255, 0, 0)';
+    }
+    
+    // Show death overlay if health is 0
+    if (health <= 0) {
+      this.showDeathOverlay(true);
+      this.stopLowHealthEffect();
+    } else {
+      this.showDeathOverlay(false);
+      
+      // Show low health effect if health is below 50
+      if (health < 50) {
+        this.showLowHealthEffect(health);
+      } else {
+        this.stopLowHealthEffect();
+      }
+    }
+    
+    this.lastHealthValue = health;
+  }
+  
+  private showDeathOverlay(show: boolean): void {
+    this.deathOverlay.style.display = show ? 'flex' : 'none';
+  }
+  
+  private showLowHealthEffect(health: number): void {
+    // Make the effect stronger as health decreases
+    const intensity = 1 - (health / 50);
+    
+    // Start low health effect if not already running
+    if (this.lowHealthAnimationId === null) {
+      this.lowHealthOverlay.style.display = 'block';
+      let opacity = 0;
+      let increasing = true;
+      
+      const animate = () => {
+        // Calculate pulse rate based on health (faster pulse at lower health)
+        const pulseRate = 0.02 + (0.04 * intensity);
+        
+        if (increasing) {
+          opacity += pulseRate;
+          if (opacity >= intensity * 0.5) { // Max opacity based on health
+            increasing = false;
+          }
+        } else {
+          opacity -= pulseRate;
+          if (opacity <= 0) {
+            increasing = true;
+          }
+        }
+        
+        this.lowHealthOverlay.style.backgroundColor = `rgba(255, 0, 0, ${opacity})`;
+        this.lowHealthAnimationId = requestAnimationFrame(animate);
+      };
+      
+      this.lowHealthAnimationId = requestAnimationFrame(animate);
+    }
+  }
+  
+  private stopLowHealthEffect(): void {
+    if (this.lowHealthAnimationId !== null) {
+      cancelAnimationFrame(this.lowHealthAnimationId);
+      this.lowHealthAnimationId = null;
+      this.lowHealthOverlay.style.display = 'none';
     }
   }
   
@@ -584,17 +718,30 @@ export class HUD {
   }
   
   public cleanup(): void {
+    // Cancel animations
+    if (this.lowHealthAnimationId !== null) {
+      cancelAnimationFrame(this.lowHealthAnimationId);
+    }
+    
     // Remove DOM elements
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
+    }
+    
+    if (this.crosshairDisplay && this.crosshairDisplay.parentNode) {
+      this.crosshairDisplay.parentNode.removeChild(this.crosshairDisplay);
     }
     
     if (this.lobbyOverlay && this.lobbyOverlay.parentNode) {
       this.lobbyOverlay.parentNode.removeChild(this.lobbyOverlay);
     }
     
-    if (this.crosshairDisplay && this.crosshairDisplay.parentNode) {
-      this.crosshairDisplay.parentNode.removeChild(this.crosshairDisplay);
+    if (this.deathOverlay && this.deathOverlay.parentNode) {
+      this.deathOverlay.parentNode.removeChild(this.deathOverlay);
+    }
+    
+    if (this.lowHealthOverlay && this.lowHealthOverlay.parentNode) {
+      this.lowHealthOverlay.parentNode.removeChild(this.lowHealthOverlay);
     }
     
     // Clear any pending timeouts

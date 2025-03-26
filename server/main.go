@@ -280,6 +280,21 @@ func (gs *GameServer) handleMessage(client *WebsocketClient, message []byte) {
 				action.Data.Target = target
 			}
 
+			// Handle direction
+			if dirData, ok := actionData["direction"].(map[string]interface{}); ok {
+				direction := &types.Vector3{}
+				if x, ok := dirData["x"].(float64); ok {
+					direction.X = x
+				}
+				if y, ok := dirData["y"].(float64); ok {
+					direction.Y = y
+				}
+				if z, ok := dirData["z"].(float64); ok {
+					direction.Z = z
+				}
+				action.Data.Direction = direction
+			}
+
 			// Handle weaponId
 			if weaponId, ok := actionData["weaponId"].(string); ok {
 				action.Data.WeaponID = weaponId

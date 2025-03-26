@@ -244,6 +244,11 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 				id,
 				action.Data.Target.X, action.Data.Target.Y, action.Data.Target.Z)
 			sm.HandleShot(id, *action.Data.Target)
+		} else if action.Data.Direction != nil {
+			log.Printf("Player %s fired a shot in direction (%.2f, %.2f, %.2f)",
+				id,
+				action.Data.Direction.X, action.Data.Direction.Y, action.Data.Direction.Z)
+			sm.HandleDirectionalShot(id, *action.Data.Direction)
 		}
 	case "reload":
 		log.Printf("Player %s reloading weapon", id)
@@ -257,13 +262,27 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 
 // HandleShot handles a player's shot
 func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
-	// Simple distance-based hit detection
 	shooter := sm.state.Players[shooterId]
 	hitRegistered := false
 
 	log.Printf("Processing shot from player %s", shooterId)
 	log.Printf("Shot target position: (%.2f, %.2f, %.2f)", target.X, target.Y, target.Z)
 	log.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
+
+	// Calculate ray direction from shooter to target
+	rayDirection := types.Vector3{
+		X: target.X - shooter.Position.X,
+		Y: target.Y - shooter.Position.Y,
+		Z: target.Z - shooter.Position.Z,
+	}
+
+	// Normalize ray direction
+	rayLength := math.Sqrt(rayDirection.X*rayDirection.X + rayDirection.Y*rayDirection.Y + rayDirection.Z*rayDirection.Z)
+	if rayLength > 0 {
+		rayDirection.X /= rayLength
+		rayDirection.Y /= rayLength
+		rayDirection.Z /= rayLength
+	}
 
 	// Log how many potential targets we're checking
 	playerCount := 0
@@ -273,6 +292,11 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 		}
 	}
 	log.Printf("Checking shot against %d potential targets", playerCount)
+
+	// Find the closest hit player (if any)
+	var closestHitPlayer *types.Player
+	var closestHitPlayerId string
+	closestDistance := math.MaxFloat64
 
 	// Check all players to see if they were hit
 	for id, player := range sm.state.Players {
@@ -286,61 +310,235 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 			continue
 		}
 
-		// Calculate distance between target and player
-		dx := player.Position.X - target.X
-		dy := player.Position.Y - target.Y
-		dz := player.Position.Z - target.Z
-		distance := math.Sqrt(dx*dx + dy*dy + dz*dz)
+		// Calculate vector from shooter to the player
+		toPlayer := types.Vector3{
+			X: player.Position.X - shooter.Position.X,
+			Y: player.Position.Y - shooter.Position.Y,
+			Z: player.Position.Z - shooter.Position.Z,
+		}
 
-		log.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance to shot: %.2f",
-			id, player.Position.X, player.Position.Y, player.Position.Z, distance)
+		// Calculate the dot product to find the projection of toPlayer onto rayDirection
+		dotProduct := toPlayer.X*rayDirection.X + toPlayer.Y*rayDirection.Y + toPlayer.Z*rayDirection.Z
 
-		// If the shot hit (within 2.5 units of the player)
-		if distance < 2.5 {
-			oldHealth := player.Health
+		// If the player is behind the shooter, skip
+		if dotProduct <= 0 {
+			log.Printf("Player %s is behind the shooter, skipping", id)
+			continue
+		}
 
-			// Reduce health
-			player.Health -= 25 // 4 shots to kill
+		// Calculate closest point on ray to player
+		closestPoint := types.Vector3{
+			X: shooter.Position.X + rayDirection.X*dotProduct,
+			Y: shooter.Position.Y + rayDirection.Y*dotProduct,
+			Z: shooter.Position.Z + rayDirection.Z*dotProduct,
+		}
 
-			log.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
-				shooterId, id, oldHealth, player.Health, distance)
+		// Calculate distance from closest point to player (perpendicular distance)
+		dx := player.Position.X - closestPoint.X
+		dy := player.Position.Y - closestPoint.Y
+		dz := player.Position.Z - closestPoint.Z
+		perpendicularDistance := math.Sqrt(dx*dx + dy*dy + dz*dz)
 
-			hitRegistered = true
+		// Calculate a distance-sensitive hit threshold
+		// Base threshold is 2.5 units at close range
+		// We add 1.5 units per 10 units of distance
+		hitThreshold := 2.5 + (dotProduct * 0.15)
 
-			// Check if player died
-			if player.Health <= 0 {
-				player.IsAlive = false
-				player.Health = 0
-				player.Deaths++
-				shooter.Kills++
+		log.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance along ray: %.2f, perpendicular distance: %.2f, hit threshold: %.2f",
+			id, player.Position.X, player.Position.Y, player.Position.Z, dotProduct, perpendicularDistance, hitThreshold)
 
-				log.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
-					id, shooterId, shooter.Kills, player.Deaths)
-
-				// Respawn player after 3 seconds
-				go func(playerId string) {
-					log.Printf("Player %s will respawn in 3 seconds", playerId)
-					time.Sleep(3 * time.Second)
-					sm.mu.Lock()
-					defer sm.mu.Unlock()
-
-					// Make sure player still exists
-					if p, exists := sm.state.Players[playerId]; exists {
-						spawnPoint := sm.getRandomSpawnPoint()
-						p.IsAlive = true
-						p.Health = 100
-						p.Position = spawnPoint
-						log.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
-							playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
-					} else {
-						log.Printf("Player %s disconnected while waiting to respawn", playerId)
-					}
-				}(id)
-			}
-
-			break // Only hit one player
+		// If the shot hit (ray passes within the calculated threshold of the player)
+		if perpendicularDistance < hitThreshold && dotProduct < closestDistance {
+			closestDistance = dotProduct
+			closestHitPlayer = player
+			closestHitPlayerId = id
 		} else {
-			log.Printf("Shot missed player %s - distance %.2f > hit threshold 2.5", id, distance)
+			log.Printf("Shot missed player %s - perpendicular distance %.2f > hit threshold %.2f", id, perpendicularDistance, hitThreshold)
+		}
+	}
+
+	// Process the hit on the closest player
+	if closestHitPlayer != nil {
+		oldHealth := closestHitPlayer.Health
+
+		// Reduce health
+		closestHitPlayer.Health -= 25 // 4 shots to kill
+
+		log.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
+			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance)
+
+		hitRegistered = true
+
+		// Check if player died
+		if closestHitPlayer.Health <= 0 {
+			closestHitPlayer.IsAlive = false
+			closestHitPlayer.Health = 0
+			closestHitPlayer.Deaths++
+			shooter.Kills++
+
+			log.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
+				closestHitPlayerId, shooterId, shooter.Kills, closestHitPlayer.Deaths)
+
+			// Respawn player after 3 seconds
+			go func(playerId string) {
+				log.Printf("Player %s will respawn in 3 seconds", playerId)
+				time.Sleep(3 * time.Second)
+				sm.mu.Lock()
+				defer sm.mu.Unlock()
+
+				// Make sure player still exists
+				if p, exists := sm.state.Players[playerId]; exists {
+					spawnPoint := sm.getRandomSpawnPoint()
+					p.IsAlive = true
+					p.Health = 100
+					p.Position = spawnPoint
+					log.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
+						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+				} else {
+					log.Printf("Player %s disconnected while waiting to respawn", playerId)
+				}
+			}(closestHitPlayerId)
+		}
+	}
+
+	if !hitRegistered {
+		log.Printf("Summary: Shot from player %s did not hit any targets", shooterId)
+	} else {
+		log.Printf("Summary: Shot from player %s registered a hit", shooterId)
+	}
+}
+
+// HandleDirectionalShot handles a shot fired with a direction vector
+func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.Vector3) {
+	shooter := sm.state.Players[shooterId]
+	hitRegistered := false
+
+	log.Printf("Processing directional shot from player %s", shooterId)
+	log.Printf("Shot direction: (%.2f, %.2f, %.2f)", direction.X, direction.Y, direction.Z)
+	log.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
+
+	// Normalize direction
+	magnitude := math.Sqrt(direction.X*direction.X + direction.Y*direction.Y + direction.Z*direction.Z)
+	if magnitude > 0 {
+		direction.X /= magnitude
+		direction.Y /= magnitude
+		direction.Z /= magnitude
+	}
+
+	// Log how many potential targets we're checking
+	playerCount := 0
+	for id, player := range sm.state.Players {
+		if id != shooterId && player.IsAlive {
+			playerCount++
+		}
+	}
+	log.Printf("Checking shot against %d potential targets", playerCount)
+
+	// Find the closest hit player (if any)
+	var closestHitPlayer *types.Player
+	var closestHitPlayerId string
+	closestDistance := math.MaxFloat64
+
+	// Check all players to see if they were hit
+	for id, player := range sm.state.Players {
+		// Skip the shooter
+		if id == shooterId {
+			continue
+		}
+
+		// Skip already dead players
+		if !player.IsAlive {
+			continue
+		}
+
+		// Calculate vector from shooter to the player
+		toPlayer := types.Vector3{
+			X: player.Position.X - shooter.Position.X,
+			Y: player.Position.Y - shooter.Position.Y,
+			Z: player.Position.Z - shooter.Position.Z,
+		}
+
+		// Calculate the dot product to find the projection of toPlayer onto direction
+		dotProduct := toPlayer.X*direction.X + toPlayer.Y*direction.Y + toPlayer.Z*direction.Z
+
+		// If the player is behind the shooter, skip
+		if dotProduct <= 0 {
+			log.Printf("Player %s is behind the shooter, skipping", id)
+			continue
+		}
+
+		// Calculate closest point on ray to player
+		closestPoint := types.Vector3{
+			X: shooter.Position.X + direction.X*dotProduct,
+			Y: shooter.Position.Y + direction.Y*dotProduct,
+			Z: shooter.Position.Z + direction.Z*dotProduct,
+		}
+
+		// Calculate distance from closest point to player (perpendicular distance)
+		dx := player.Position.X - closestPoint.X
+		dy := player.Position.Y - closestPoint.Y
+		dz := player.Position.Z - closestPoint.Z
+		perpendicularDistance := math.Sqrt(dx*dx + dy*dy + dz*dz)
+
+		// Calculate a distance-sensitive hit threshold
+		// Base threshold is 2.5 units at close range
+		// We add 1.5 units per 10 units of distance
+		hitThreshold := 2.5 + (dotProduct * 0.15)
+
+		log.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance along ray: %.2f, perpendicular distance: %.2f, hit threshold: %.2f",
+			id, player.Position.X, player.Position.Y, player.Position.Z, dotProduct, perpendicularDistance, hitThreshold)
+
+		// If the shot hit (ray passes within the calculated threshold of the player)
+		if perpendicularDistance < hitThreshold && dotProduct < closestDistance {
+			closestDistance = dotProduct
+			closestHitPlayer = player
+			closestHitPlayerId = id
+		} else {
+			log.Printf("Shot missed player %s - perpendicular distance %.2f > hit threshold %.2f", id, perpendicularDistance, hitThreshold)
+		}
+	}
+
+	// Process the hit on the closest player
+	if closestHitPlayer != nil {
+		oldHealth := closestHitPlayer.Health
+
+		// Reduce health
+		closestHitPlayer.Health -= 25 // 4 shots to kill
+
+		log.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
+			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance)
+
+		hitRegistered = true
+
+		// Check if player died
+		if closestHitPlayer.Health <= 0 {
+			closestHitPlayer.IsAlive = false
+			closestHitPlayer.Health = 0
+			closestHitPlayer.Deaths++
+			shooter.Kills++
+
+			log.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
+				closestHitPlayerId, shooterId, shooter.Kills, closestHitPlayer.Deaths)
+
+			// Respawn player after 3 seconds
+			go func(playerId string) {
+				log.Printf("Player %s will respawn in 3 seconds", playerId)
+				time.Sleep(3 * time.Second)
+				sm.mu.Lock()
+				defer sm.mu.Unlock()
+
+				// Make sure player still exists
+				if p, exists := sm.state.Players[playerId]; exists {
+					spawnPoint := sm.getRandomSpawnPoint()
+					p.IsAlive = true
+					p.Health = 100
+					p.Position = spawnPoint
+					log.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
+						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+				} else {
+					log.Printf("Player %s disconnected while waiting to respawn", playerId)
+				}
+			}(closestHitPlayerId)
 		}
 	}
 
