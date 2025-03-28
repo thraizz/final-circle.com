@@ -393,8 +393,8 @@ export class PlayerControls {
       this.player.position.copy(PlayerControls.newPosition);
       
       // Reset jump state if on ground
-      if (this.player.position.y <= 0) {
-        this.player.position.y = 0;
+      if (this.player.position.y <= 0.1) {
+        this.player.position.y = 0.1; // Slightly above ground level
         this.velocity.y = 0;
         this.canJump = true;
       }

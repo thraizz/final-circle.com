@@ -64,7 +64,7 @@ export class GameEngine {
     );
     this.camera.position.set(0, 2, 5);
     this.camera.lookAt(0, 0, 0);
-
+    
     // Renderer setup with optimizations
     this.renderer = new THREE.WebGLRenderer({ 
       antialias: true,
@@ -105,7 +105,7 @@ export class GameEngine {
     this.players = new Map();
 
     // Game map setup
-    this.gameMap = new GameMap(this.scene);
+    this.gameMap = new GameMap(this.scene, this.renderer);
 
     // Player controls setup
     this.playerControls = new PlayerControls(
