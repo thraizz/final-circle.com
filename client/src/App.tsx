@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import { LandingPage } from './components/LandingPage'
 import { Login } from './components/Login'
 import { GameEngine } from './engine/GameEngine'
 import { HUDConfig } from './engine/HUD'
@@ -9,6 +10,7 @@ function App() {
   const gameEngineRef = useRef<GameEngine | null>(null)
   const [showInstructions, setShowInstructions] = useState(true)
   const [playerName, setPlayerName] = useState<string | null>(null)
+  const [gameState, setGameState] = useState<'landing' | 'game'>('landing')
   const [hudConfig, setHudConfig] = useState<HUDConfig>({
     showFPS: true,
     showHealth: true,
@@ -21,8 +23,13 @@ function App() {
 
   const handleLogin = (name: string) => {
     setPlayerName(name);
-    // LocalStorage for persistence across refreshes
     localStorage.setItem('playerName', name);
+  };
+
+  const handleJoinLobby = (_lobbyId: string) => {
+    // In a real implementation, this would connect to the game server
+    // and handle the lobby joining logic
+    setGameState('game');
   };
 
   // Check for saved player name on load
@@ -33,13 +40,25 @@ function App() {
     }
   }, []);
 
+  // Single effect to handle game engine lifecycle
   useEffect(() => {
-    // Don't create game engine until player name is set
-    if (!playerName || !mountRef.current) return;
+    // Don't create game engine until player name is set and game state is 'game'
+    if (!playerName || !mountRef.current || gameState !== 'game') {
+      return;
+    }
+
+    // Clear any existing content in the mount point
+    while (mountRef.current.firstChild) {
+      mountRef.current.removeChild(mountRef.current.firstChild);
+    }
 
     // Initialize game engine with HUD config
     const gameEngine = new GameEngine(hudConfig, playerName)
     gameEngineRef.current = gameEngine
+
+    // Move the renderer to our mount point
+    const canvas = gameEngine.getRenderer().domElement;
+    mountRef.current.appendChild(canvas);
 
     // Start the game loop
     gameEngine.start()
@@ -49,31 +68,18 @@ function App() {
       setShowInstructions(false)
     }, 10000)
 
-    // Clean up on unmount
+    // Clean up on unmount or when dependencies change
     return () => {
       clearTimeout(timer)
       if (gameEngineRef.current) {
+        if (mountRef.current?.contains(gameEngineRef.current.getRenderer().domElement)) {
+          mountRef.current.removeChild(gameEngineRef.current.getRenderer().domElement);
+        }
         gameEngineRef.current.cleanup()
         gameEngineRef.current = null
       }
     }
-  }, [playerName]) // Re-run when playerName changes
-
-  // Update HUD config whenever it changes
-  useEffect(() => {
-    if (!playerName) return; // Don't update if not logged in
-
-    if (gameEngineRef.current) {
-      const gameEngine = gameEngineRef.current
-      // We need to update HUD manually here
-      // This is a simple workaround since we don't have direct access to the HUD
-      // A better approach would be to expose a updateHUDConfig method in GameEngine
-      gameEngine.cleanup()
-      const newEngine = new GameEngine(hudConfig, playerName)
-      gameEngineRef.current = newEngine
-      newEngine.start()
-    }
-  }, [hudConfig, playerName])
+  }, [playerName, gameState, hudConfig]) // Include all dependencies that should trigger a game engine reset
 
   // Handler for toggling HUD elements
   const toggleHUDElement = (element: keyof HUDConfig) => {
@@ -86,6 +92,11 @@ function App() {
   // If player name is not set, show login screen
   if (!playerName) {
     return <Login onLogin={handleLogin} />;
+  }
+
+  // If in landing state, show landing page
+  if (gameState === 'landing') {
+    return <LandingPage onJoinLobby={handleJoinLobby} />;
   }
 
   return (

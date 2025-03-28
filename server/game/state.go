@@ -1,11 +1,11 @@
 package game
 
 import (
-	"log"
 	"math"
 	"sync"
 	"time"
 
+	"finalcircle/server/logger"
 	"finalcircle/server/types"
 )
 
@@ -69,7 +69,7 @@ func (sm *StateManager) Update() {
 				leaderName = sm.state.Players[leadingPlayer].DisplayName
 			}
 
-			log.Printf("Game status update - Time: %.1f, Players: %d active/%d total, Leader: %s (%d kills)",
+			logger.InfoLogger.Printf("Game status update - Time: %.1f, Players: %d active/%d total, Leader: %s (%d kills)",
 				sm.state.GameTime, activePlayers, len(sm.state.Players),
 				leaderName, highestKills)
 		}
@@ -100,7 +100,7 @@ func (sm *StateManager) checkAchievements() {
 		// For now, we'll just use the current kills as an approximation
 		if player.Kills > 0 && player.Kills%5 == 0 && player.IsAlive {
 			// Only log once when they reach each multiple of 5
-			log.Printf("ACHIEVEMENT: Player %s (%s) is on a %d kill streak!",
+			logger.DebugLogger.Printf("ACHIEVEMENT: Player %s (%s) is on a %d kill streak!",
 				id, player.DisplayName, player.Kills)
 		}
 	}
@@ -144,7 +144,7 @@ func (sm *StateManager) checkAchievements() {
 		player2 := sm.state.Players[topPlayers[1].id]
 
 		// Log a message about the close match
-		log.Printf("CLOSE MATCH: %s (%d kills) and %s (%d kills) are in a tight race!",
+		logger.DebugLogger.Printf("CLOSE MATCH: %s (%d kills) and %s (%d kills) are in a tight race!",
 			player1.DisplayName, player1.Kills,
 			player2.DisplayName, player2.Kills)
 	}
@@ -156,12 +156,12 @@ func (sm *StateManager) AddPlayer(id string) error {
 	defer sm.mu.Unlock()
 
 	if len(sm.state.Players) >= sm.maxPlayers {
-		log.Printf("Player join rejected: server full (max: %d)", sm.maxPlayers)
+		logger.InfoLogger.Printf("Player join rejected: server full (max: %d)", sm.maxPlayers)
 		return types.ErrGameNotActive
 	}
 
 	if _, exists := sm.state.Players[id]; exists {
-		log.Printf("Player join rejected: ID %s already exists", id)
+		logger.InfoLogger.Printf("Player join rejected: ID %s already exists", id)
 		return types.ErrPlayerAlreadyExists
 	}
 
@@ -179,7 +179,7 @@ func (sm *StateManager) AddPlayer(id string) error {
 		Deaths:      0,
 	}
 
-	log.Printf("Player added: %s at position (%.2f, %.2f, %.2f)", id, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+	logger.DebugLogger.Printf("Player added: %s at position (%.2f, %.2f, %.2f)", id, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
 	return nil
 }
 
@@ -190,11 +190,11 @@ func (sm *StateManager) RemovePlayer(id string) error {
 
 	player, exists := sm.state.Players[id]
 	if !exists {
-		log.Printf("Player removal failed: ID %s not found", id)
+		logger.InfoLogger.Printf("Player removal failed: ID %s not found", id)
 		return types.ErrPlayerNotFound
 	}
 
-	log.Printf("Player removed: %s (Kills: %d, Deaths: %d)", id, player.Kills, player.Deaths)
+	logger.DebugLogger.Printf("Player removed: %s (Kills: %d, Deaths: %d)", id, player.Kills, player.Deaths)
 	delete(sm.state.Players, id)
 	return nil
 }
@@ -213,12 +213,12 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 
 	player, exists := sm.state.Players[id]
 	if !exists {
-		log.Printf("Action rejected: player %s not found", id)
+		logger.InfoLogger.Printf("Action rejected: player %s not found", id)
 		return types.ErrPlayerNotFound
 	}
 
 	if !player.IsAlive {
-		log.Printf("Action rejected: player %s is not alive", id)
+		logger.InfoLogger.Printf("Action rejected: player %s is not alive", id)
 		return types.ErrGameNotActive
 	}
 
@@ -227,7 +227,7 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 		if action.Data.Position != nil {
 			oldPos := player.Position
 			player.Position = *action.Data.Position
-			log.Printf("Player %s moved: (%.2f, %.2f, %.2f) -> (%.2f, %.2f, %.2f)",
+			logger.DebugLogger.Printf("Player %s moved: (%.2f, %.2f, %.2f) -> (%.2f, %.2f, %.2f)",
 				id,
 				oldPos.X, oldPos.Y, oldPos.Z,
 				player.Position.X, player.Position.Y, player.Position.Z)
@@ -236,25 +236,25 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 			player.Rotation = *action.Data.Rotation
 		}
 	case "jump":
-		log.Printf("Player %s jumped", id)
+		logger.DebugLogger.Printf("Player %s jumped", id)
 		// Implement jump mechanics
 	case "shoot":
 		if action.Data.Target != nil {
-			log.Printf("Player %s fired a shot at position (%.2f, %.2f, %.2f)",
+			logger.DebugLogger.Printf("Player %s fired a shot at position (%.2f, %.2f, %.2f)",
 				id,
 				action.Data.Target.X, action.Data.Target.Y, action.Data.Target.Z)
 			sm.HandleShot(id, *action.Data.Target)
 		} else if action.Data.Direction != nil {
-			log.Printf("Player %s fired a shot in direction (%.2f, %.2f, %.2f)",
+			logger.DebugLogger.Printf("Player %s fired a shot in direction (%.2f, %.2f, %.2f)",
 				id,
 				action.Data.Direction.X, action.Data.Direction.Y, action.Data.Direction.Z)
 			sm.HandleDirectionalShot(id, *action.Data.Direction)
 		}
 	case "reload":
-		log.Printf("Player %s reloading weapon", id)
+		logger.DebugLogger.Printf("Player %s reloading weapon", id)
 		// Implement reload mechanics
 	default:
-		log.Printf("Unknown action type from player %s: %s", id, action.Type)
+		logger.InfoLogger.Printf("Unknown action type from player %s: %s", id, action.Type)
 	}
 
 	return nil
@@ -265,9 +265,9 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 	shooter := sm.state.Players[shooterId]
 	hitRegistered := false
 
-	log.Printf("Processing shot from player %s", shooterId)
-	log.Printf("Shot target position: (%.2f, %.2f, %.2f)", target.X, target.Y, target.Z)
-	log.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
+	logger.DebugLogger.Printf("Processing shot from player %s", shooterId)
+	logger.DebugLogger.Printf("Shot target position: (%.2f, %.2f, %.2f)", target.X, target.Y, target.Z)
+	logger.DebugLogger.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
 
 	// Calculate ray direction from shooter to target
 	rayDirection := types.Vector3{
@@ -291,7 +291,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 			playerCount++
 		}
 	}
-	log.Printf("Checking shot against %d potential targets", playerCount)
+	logger.DebugLogger.Printf("Checking shot against %d potential targets", playerCount)
 
 	// Find the closest hit player (if any)
 	var closestHitPlayer *types.Player
@@ -322,7 +322,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 
 		// If the player is behind the shooter, skip
 		if dotProduct <= 0 {
-			log.Printf("Player %s is behind the shooter, skipping", id)
+			logger.DebugLogger.Printf("Player %s is behind the shooter, skipping", id)
 			continue
 		}
 
@@ -344,7 +344,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 		// We add 1.5 units per 10 units of distance
 		hitThreshold := 2.5 + (dotProduct * 0.15)
 
-		log.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance along ray: %.2f, perpendicular distance: %.2f, hit threshold: %.2f",
+		logger.DebugLogger.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance along ray: %.2f, perpendicular distance: %.2f, hit threshold: %.2f",
 			id, player.Position.X, player.Position.Y, player.Position.Z, dotProduct, perpendicularDistance, hitThreshold)
 
 		// If the shot hit (ray passes within the calculated threshold of the player)
@@ -353,7 +353,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 			closestHitPlayer = player
 			closestHitPlayerId = id
 		} else {
-			log.Printf("Shot missed player %s - perpendicular distance %.2f > hit threshold %.2f", id, perpendicularDistance, hitThreshold)
+			logger.DebugLogger.Printf("Shot missed player %s - perpendicular distance %.2f > hit threshold %.2f", id, perpendicularDistance, hitThreshold)
 		}
 	}
 
@@ -364,7 +364,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 		// Reduce health
 		closestHitPlayer.Health -= 25 // 4 shots to kill
 
-		log.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
+		logger.DebugLogger.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
 			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance)
 
 		hitRegistered = true
@@ -376,12 +376,12 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 			closestHitPlayer.Deaths++
 			shooter.Kills++
 
-			log.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
+			logger.InfoLogger.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
 				closestHitPlayerId, shooterId, shooter.Kills, closestHitPlayer.Deaths)
 
 			// Respawn player after 3 seconds
 			go func(playerId string) {
-				log.Printf("Player %s will respawn in 3 seconds", playerId)
+				logger.DebugLogger.Printf("Player %s will respawn in 3 seconds", playerId)
 				time.Sleep(3 * time.Second)
 				sm.mu.Lock()
 				defer sm.mu.Unlock()
@@ -392,19 +392,19 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 					p.IsAlive = true
 					p.Health = 100
 					p.Position = spawnPoint
-					log.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
+					logger.DebugLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
 						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
 				} else {
-					log.Printf("Player %s disconnected while waiting to respawn", playerId)
+					logger.InfoLogger.Printf("Player %s disconnected while waiting to respawn", playerId)
 				}
 			}(closestHitPlayerId)
 		}
 	}
 
 	if !hitRegistered {
-		log.Printf("Summary: Shot from player %s did not hit any targets", shooterId)
+		logger.DebugLogger.Printf("Summary: Shot from player %s did not hit any targets", shooterId)
 	} else {
-		log.Printf("Summary: Shot from player %s registered a hit", shooterId)
+		logger.DebugLogger.Printf("Summary: Shot from player %s registered a hit", shooterId)
 	}
 }
 
@@ -413,9 +413,9 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 	shooter := sm.state.Players[shooterId]
 	hitRegistered := false
 
-	log.Printf("Processing directional shot from player %s", shooterId)
-	log.Printf("Shot direction: (%.2f, %.2f, %.2f)", direction.X, direction.Y, direction.Z)
-	log.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
+	logger.DebugLogger.Printf("Processing directional shot from player %s", shooterId)
+	logger.DebugLogger.Printf("Shot direction: (%.2f, %.2f, %.2f)", direction.X, direction.Y, direction.Z)
+	logger.DebugLogger.Printf("Shooter position: (%.2f, %.2f, %.2f)", shooter.Position.X, shooter.Position.Y, shooter.Position.Z)
 
 	// Normalize direction
 	magnitude := math.Sqrt(direction.X*direction.X + direction.Y*direction.Y + direction.Z*direction.Z)
@@ -432,7 +432,7 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 			playerCount++
 		}
 	}
-	log.Printf("Checking shot against %d potential targets", playerCount)
+	logger.DebugLogger.Printf("Checking shot against %d potential targets", playerCount)
 
 	// Find the closest hit player (if any)
 	var closestHitPlayer *types.Player
@@ -463,7 +463,7 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 
 		// If the player is behind the shooter, skip
 		if dotProduct <= 0 {
-			log.Printf("Player %s is behind the shooter, skipping", id)
+			logger.DebugLogger.Printf("Player %s is behind the shooter, skipping", id)
 			continue
 		}
 
@@ -485,7 +485,7 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 		// We add 1.5 units per 10 units of distance
 		hitThreshold := 2.5 + (dotProduct * 0.15)
 
-		log.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance along ray: %.2f, perpendicular distance: %.2f, hit threshold: %.2f",
+		logger.DebugLogger.Printf("Checking player %s at position (%.2f, %.2f, %.2f), distance along ray: %.2f, perpendicular distance: %.2f, hit threshold: %.2f",
 			id, player.Position.X, player.Position.Y, player.Position.Z, dotProduct, perpendicularDistance, hitThreshold)
 
 		// If the shot hit (ray passes within the calculated threshold of the player)
@@ -494,7 +494,7 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 			closestHitPlayer = player
 			closestHitPlayerId = id
 		} else {
-			log.Printf("Shot missed player %s - perpendicular distance %.2f > hit threshold %.2f", id, perpendicularDistance, hitThreshold)
+			logger.DebugLogger.Printf("Shot missed player %s - perpendicular distance %.2f > hit threshold %.2f", id, perpendicularDistance, hitThreshold)
 		}
 	}
 
@@ -505,7 +505,7 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 		// Reduce health
 		closestHitPlayer.Health -= 25 // 4 shots to kill
 
-		log.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
+		logger.DebugLogger.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
 			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance)
 
 		hitRegistered = true
@@ -517,12 +517,12 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 			closestHitPlayer.Deaths++
 			shooter.Kills++
 
-			log.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
+			logger.InfoLogger.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
 				closestHitPlayerId, shooterId, shooter.Kills, closestHitPlayer.Deaths)
 
 			// Respawn player after 3 seconds
 			go func(playerId string) {
-				log.Printf("Player %s will respawn in 3 seconds", playerId)
+				logger.DebugLogger.Printf("Player %s will respawn in 3 seconds", playerId)
 				time.Sleep(3 * time.Second)
 				sm.mu.Lock()
 				defer sm.mu.Unlock()
@@ -533,19 +533,19 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 					p.IsAlive = true
 					p.Health = 100
 					p.Position = spawnPoint
-					log.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
+					logger.DebugLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
 						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
 				} else {
-					log.Printf("Player %s disconnected while waiting to respawn", playerId)
+					logger.InfoLogger.Printf("Player %s disconnected while waiting to respawn", playerId)
 				}
 			}(closestHitPlayerId)
 		}
 	}
 
 	if !hitRegistered {
-		log.Printf("Summary: Shot from player %s did not hit any targets", shooterId)
+		logger.DebugLogger.Printf("Summary: Shot from player %s did not hit any targets", shooterId)
 	} else {
-		log.Printf("Summary: Shot from player %s registered a hit", shooterId)
+		logger.DebugLogger.Printf("Summary: Shot from player %s registered a hit", shooterId)
 	}
 }
 
@@ -555,13 +555,13 @@ func (sm *StateManager) StartGame() error {
 	defer sm.mu.Unlock()
 
 	if len(sm.state.Players) < 2 {
-		log.Printf("Game start rejected: not enough players (%d/2)", len(sm.state.Players))
+		logger.InfoLogger.Printf("Game start rejected: not enough players (%d/2)", len(sm.state.Players))
 		return types.ErrGameNotActive
 	}
 
 	sm.state.IsGameActive = true
 	sm.state.GameTime = 0
-	log.Printf("Game started: %s with %d players", sm.state.MatchID, len(sm.state.Players))
+	logger.InfoLogger.Printf("Game started: %s with %d players", sm.state.MatchID, len(sm.state.Players))
 	return nil
 }
 
@@ -572,7 +572,7 @@ func (sm *StateManager) EndGame() {
 
 	sm.state.IsGameActive = false
 	sm.state.GameTime = 0
-	log.Printf("Game ended: %s, total time: %.2f seconds", sm.state.MatchID, sm.state.GameTime)
+	logger.InfoLogger.Printf("Game ended: %s, total time: %.2f seconds", sm.state.MatchID, sm.state.GameTime)
 }
 
 // getRandomSpawnPoint returns a random spawn point
@@ -609,12 +609,12 @@ func (sm *StateManager) UpdatePlayerName(id string, displayName string) error {
 
 	player, exists := sm.state.Players[id]
 	if !exists {
-		log.Printf("Set name failed: player %s not found", id)
+		logger.InfoLogger.Printf("Set name failed: player %s not found", id)
 		return types.ErrPlayerNotFound
 	}
 
 	oldName := player.DisplayName
 	player.DisplayName = displayName
-	log.Printf("Player %s changed name: '%s' -> '%s'", id, oldName, displayName)
+	logger.DebugLogger.Printf("Player %s changed name: '%s' -> '%s'", id, oldName, displayName)
 	return nil
 }

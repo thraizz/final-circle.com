@@ -40,6 +40,10 @@ ExecStart=$REMOTE_DIR/final-circle-server
 Restart=always
 RestartSec=10
 Environment=PORT=$APP_PORT
+Environment=ENV=production
+Environment=TLS_CERT_FILE=/etc/letsencrypt/live/backend.final-circle.com/fullchain.pem
+Environment=TLS_KEY_FILE=/etc/letsencrypt/live/backend.final-circle.com/privkey.pem
+
 
 [Install]
 WantedBy=multi-user.target
@@ -81,7 +85,7 @@ ssh $REMOTE_USER@$REMOTE_HOST "cd $REMOTE_DIR && \
     # Create a startup script
     echo '#!/bin/bash' > start-server.sh && \
     echo 'cd \"$REMOTE_DIR\"' >> start-server.sh && \
-    echo 'PORT=$APP_PORT nohup ./final-circle-server > finalcircle.log 2>&1 &' >> start-server.sh && \
+    echo 'PORT=$APP_PORT ENV=production nohup ./final-circle-server > finalcircle.log 2>&1 &' >> start-server.sh && \
     chmod +x start-server.sh && \
     # Start the server
     ./start-server.sh && \

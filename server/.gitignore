@@ -1,3 +1,4 @@
 final-circle-server
 .env
 static/*.pem
+vendor/

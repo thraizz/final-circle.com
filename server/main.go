@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
+	"finalcircle/server/config"
 	"finalcircle/server/game"
+	"finalcircle/server/logger"
 	"finalcircle/server/types"
 
 	"github.com/google/uuid"
@@ -45,7 +46,7 @@ func newGameServer() (*GameServer, error) {
 		startTime: time.Now(),
 	}
 
-	log.Printf("Game server initialized with max players: 50")
+	logger.InfoLogger.Printf("Game server initialized with max players: 50")
 	return gs, nil
 }
 
@@ -410,38 +411,35 @@ func (gs *GameServer) close() {
 }
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	// Load configuration
+	cfg := config.LoadConfig()
 
-	// Check for TLS cert and key path environment variables
-	certFile := os.Getenv("TLS_CERT_FILE")
-	keyFile := os.Getenv("TLS_KEY_FILE")
-	useTLS := certFile != "" && keyFile != ""
+	// Initialize logger based on environment
+	logger.Init(cfg.IsDevelopment)
 
-	log.Printf("Server starting on :%s (TLS: %v)", port, useTLS)
+	logger.InfoLogger.Printf("Server starting on :%s (TLS: %v, Environment: %s)",
+		cfg.Port, cfg.UseTLS, map[bool]string{true: "development", false: "production"}[cfg.IsDevelopment])
 
 	gs, err := newGameServer()
 	if err != nil {
-		log.Fatalf("Failed to create game server: %v", err)
+		logger.ErrorLogger.Fatalf("Failed to create game server: %v", err)
 	}
 
 	// Start the game server loop
 	go gs.run()
-	log.Printf("Game loop started")
+	logger.InfoLogger.Printf("Game loop started")
 
 	// Set up HTTP routes
 	// Using http.ServeMux instead of gorilla/mux
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", gs.handleWebSocket)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Health check received")
+		logger.DebugLogger.Printf("Health check received")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Status request received")
+		logger.DebugLogger.Printf("Status request received")
 		gs.clientsMu.RLock()
 		clientCount := len(gs.clients)
 		gs.clientsMu.RUnlock()
@@ -456,26 +454,25 @@ func main() {
 		}
 
 		json.NewEncoder(w).Encode(status)
-		log.Printf("Status request: %d clients, game active: %v", clientCount, state.IsGameActive)
+		logger.DebugLogger.Printf("Status request: %d clients, game active: %v", clientCount, state.IsGameActive)
 	})
 
 	// API endpoints for game control
 	mux.HandleFunc("/api/game/start", func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("API request to start game received")
+		logger.DebugLogger.Printf("API request to start game received")
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		log.Printf("API request to start game received")
 		err := gs.stateManager.StartGame()
 		if err != nil {
-			log.Printf("Failed to start game: %v", err)
+			logger.ErrorLogger.Printf("Failed to start game: %v", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		log.Printf("Game started via API")
+		logger.InfoLogger.Printf("Game started via API")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Game started"))
 
@@ -489,9 +486,9 @@ func main() {
 			return
 		}
 
-		log.Printf("API request to end game received")
+		logger.DebugLogger.Printf("API request to end game received")
 		gs.stateManager.EndGame()
-		log.Printf("Game ended via API")
+		logger.InfoLogger.Printf("Game ended via API")
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Game ended"))
@@ -510,25 +507,25 @@ func main() {
 
 	// Start HTTP server
 	server := &http.Server{
-		Addr:         ":" + port,
+		Addr:         ":" + cfg.Port,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("HTTP server listening on :%s", port)
+	logger.InfoLogger.Printf("HTTP server listening on :%s", cfg.Port)
 
 	// Use TLS if cert and key files are provided
-	if useTLS {
-		log.Printf("Starting server with TLS using cert: %s and key: %s", certFile, keyFile)
-		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
-			log.Fatalf("Failed to start TLS server: %v", err)
+	if cfg.UseTLS {
+		logger.InfoLogger.Printf("Starting server with TLS using cert: %s and key: %s", cfg.CertFile, cfg.KeyFile)
+		if err := server.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile); err != nil {
+			logger.ErrorLogger.Fatalf("Failed to start TLS server: %v", err)
 		}
 	} else {
-		log.Printf("Starting server without TLS")
+		logger.InfoLogger.Printf("Starting server without TLS")
 		if err := server.ListenAndServe(); err != nil {
-			log.Fatalf("Failed to start server: %v", err)
+			logger.ErrorLogger.Fatalf("Failed to start server: %v", err)
 		}
 	}
 }

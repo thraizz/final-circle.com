@@ -75,7 +75,6 @@ export class GameEngine {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    document.body.appendChild(this.renderer.domElement);
 
     // Game state setup
     this.gameState = {
@@ -439,21 +438,13 @@ export class GameEngine {
   }
 
   public cleanup(): void {
-    // Stop game loop
     this.stop();
-    
-    // Disconnect from server
     this.disconnect();
-    
-    // Remove event listeners
     window.removeEventListener('resize', this.handleResize.bind(this));
-    
-    // Clean up player controls
     this.playerControls.cleanup();
-    
-    // Remove renderer
-    if (this.renderer && this.renderer.domElement.parentNode) {
-      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
-    }
+  }
+
+  public getRenderer(): THREE.WebGLRenderer {
+    return this.renderer;
   }
 } 
