@@ -4,6 +4,7 @@ import { ErrorMessage, GameState, PlayerAction } from '../types/game';
 import { GameMap } from './GameMap';
 import { HUD, HUDConfig } from './HUD';
 import { PlayerControls } from './PlayerControls';
+import { SpectatorControls } from './SpectatorControls';
 
 export class GameEngine {
   private scene: THREE.Scene;
@@ -17,6 +18,8 @@ export class GameEngine {
   private playerName: string;
   private player: THREE.Object3D;
   private playerControls: PlayerControls;
+  private spectatorControls: SpectatorControls | null = null;
+  private isSpectatorMode: boolean = false;
   private players: Map<string, THREE.Object3D>;
   private gameMap: GameMap;
   private hud: HUD;
@@ -124,7 +127,7 @@ export class GameEngine {
     this.playerId = null;
 
     // Event listeners
-    window.addEventListener('resize', this.handleResize.bind(this));
+    this.setupEventListeners();
   }
 
   private setupWebSocket(): void {
@@ -390,8 +393,12 @@ export class GameEngine {
     const deltaTime = (currentTime - this.lastFrameTime) / 1000;
     this.lastFrameTime = currentTime;
     
-    // Update player controls
-    this.playerControls.update(deltaTime);
+    // Update controls based on mode
+    if (this.isSpectatorMode && this.spectatorControls) {
+      this.spectatorControls.update(deltaTime);
+    } else {
+      this.playerControls.update(deltaTime);
+    }
     
     // Render the scene
     this.renderer.render(this.scene, this.camera);
@@ -438,13 +445,70 @@ export class GameEngine {
   }
 
   public cleanup(): void {
+    if (this.playerControls) {
+      this.playerControls.cleanup();
+    }
+    if (this.spectatorControls) {
+      this.spectatorControls.cleanup();
+    }
     this.stop();
     this.disconnect();
     window.removeEventListener('resize', this.handleResize.bind(this));
-    this.playerControls.cleanup();
+    window.removeEventListener('keydown', this.handleKeyDown.bind(this));
   }
 
   public getRenderer(): THREE.WebGLRenderer {
     return this.renderer;
+  }
+
+  public toggleSpectatorMode(): void {
+    if (this.isSpectatorMode) {
+      // Switch back to player mode
+      this.isSpectatorMode = false;
+      if (this.spectatorControls) {
+        this.spectatorControls.cleanup();
+        this.spectatorControls = null;
+      }
+      
+      // Reset player camera
+      this.camera.position.set(
+        this.player.position.x,
+        this.player.position.y + 1.6,
+        this.player.position.z
+      );
+      this.camera.rotation.set(0, 0, 0);
+      this.playerControls = new PlayerControls(
+        this.camera,
+        this.player,
+        this.handlePlayerAction.bind(this),
+        this.gameMap.getObstacles()
+      );
+    } else {
+      // Switch to spectator mode
+      this.isSpectatorMode = true;
+      if (this.playerControls) {
+        this.playerControls.cleanup();
+      }
+      
+      // Create spectator controls
+      this.spectatorControls = new SpectatorControls(this.camera);
+    }
+  }
+
+  // Add keyboard shortcut for toggling spectator mode
+  private setupEventListeners(): void {
+    window.addEventListener('resize', this.handleResize.bind(this));
+    // Add key listener for spectator mode toggle
+    window.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.code === 'KeyV') {
+        this.toggleSpectatorMode();
+      }
+    });
+  }
+
+  private handleKeyDown(event: KeyboardEvent): void {
+    if (event.code === 'KeyV') {
+      this.toggleSpectatorMode();
+    }
   }
 } 
