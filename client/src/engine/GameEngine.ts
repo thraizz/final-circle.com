@@ -398,7 +398,19 @@ export class GameEngine {
       this.spectatorControls.update(deltaTime);
     } else {
       this.playerControls.update(deltaTime);
+      
+      // Update weapon info in HUD
+      const weaponSystem = this.playerControls.getWeaponSystem();
+      const currentWeapon = weaponSystem.getCurrentWeapon();
+      const weaponState = weaponSystem.getWeaponState();
+      
+      if (currentWeapon && weaponState) {
+        this.hud.updateWeaponInfo(currentWeapon, weaponState);
+      }
     }
+    
+    // Update FPS counter
+    this.hud.updateFPS();
     
     // Render the scene
     this.renderer.render(this.scene, this.camera);
