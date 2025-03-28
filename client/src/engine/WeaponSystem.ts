@@ -290,14 +290,50 @@ export class WeaponSystem {
     if (!this.weaponMesh) return;
 
     // Create muzzle flash light
-    const light = new THREE.PointLight(0xffaa00, 3, 2);
+    const light = new THREE.PointLight(0xffaa00, 5, 2); // Increased intensity
     light.position.set(0, 0, -1).add(this.weaponMesh.position);
     this.weaponMesh.add(light);
+
+    // Create visible muzzle flash mesh - cone shape pointing forward
+    const flashGeometry = new THREE.ConeGeometry(0.15, 0.3, 8);
+    const flashMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffff00, // Brighter yellow
+      transparent: true,
+      opacity: 0.9,
+      emissive: 0xffaa00,
+      emissiveIntensity: 2.0
+    });
+    
+    const flashMesh = new THREE.Mesh(flashGeometry, flashMaterial);
+    // Position at the end of the weapon and rotate to point forward
+    flashMesh.position.set(0, 0, -1.05).add(this.weaponMesh.position);
+    flashMesh.rotation.x = -Math.PI / 2; // Rotate to point forward
+    this.weaponMesh.add(flashMesh);
+    
+    // Add small bright core at the center
+    const coreGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+    const coreMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff, // Pure white
+      transparent: true,
+      opacity: 1.0,
+      emissive: 0xffffff,
+      emissiveIntensity: 3.0
+    });
+    
+    const coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
+    coreMesh.position.copy(flashMesh.position);
+    this.weaponMesh.add(coreMesh);
 
     // Remove after a short delay
     setTimeout(() => {
       if (light.parent) {
         light.parent.remove(light);
+      }
+      if (flashMesh.parent) {
+        flashMesh.parent.remove(flashMesh);
+      }
+      if (coreMesh.parent) {
+        coreMesh.parent.remove(coreMesh);
       }
     }, 50);
   }
