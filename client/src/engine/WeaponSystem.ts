@@ -87,6 +87,19 @@ export class WeaponSystem {
   private reloadTimeout: number | null = null;
   private isMoving: boolean = false;
   private weaponMesh: THREE.Mesh | null = null;
+  private magazineMesh: THREE.Mesh | null = null;
+  private reloadAnimationStartTime: number | null = null;
+  private cameraJerkEffect: THREE.Vector3 | null = null;
+  private cameraJerkDecay: number = 15; // How fast the jerk effect decays
+  private static readonly particleGeometry = new THREE.SphereGeometry(0.02, 4, 4);
+  private static readonly particleMaterial = new THREE.MeshBasicMaterial({
+    color: 0xaaddff,
+    transparent: true,
+    opacity: 0.8
+  });
+  private lastInsertEffectTime: number = 0;
+  // Pool of particle objects for reuse
+  private particlePool: THREE.Mesh[] = [];
 
   constructor(camera: THREE.PerspectiveCamera, onShoot: (shot: ShotInfo) => void) {
     this.camera = camera;
@@ -97,6 +110,16 @@ export class WeaponSystem {
       isAiming: false,
       currentAccuracy: 1.0,
     };
+    
+    // Create particle pool - pre-allocate objects
+    for (let i = 0; i < 3; i++) {
+      const particle = new THREE.Mesh(
+        WeaponSystem.particleGeometry, 
+        WeaponSystem.particleMaterial.clone()
+      );
+      particle.visible = false;
+      this.particlePool.push(particle);
+    }
   }
 
   public equipWeapon(type: WeaponType, name: string): void {
@@ -138,6 +161,8 @@ export class WeaponSystem {
     let material: THREE.Material;
     let position: THREE.Vector3;
     let scale: THREE.Vector3;
+    let magazineGeometry: THREE.BufferGeometry;
+    let magazinePosition: THREE.Vector3;
 
     switch (type) {
       case 'RIFLE':
@@ -145,30 +170,44 @@ export class WeaponSystem {
         material = new THREE.MeshStandardMaterial({ color: 0x444444 });
         position = new THREE.Vector3(0.3, -0.3, -0.8);
         scale = new THREE.Vector3(1, 1, 1);
+        magazineGeometry = new THREE.BoxGeometry(0.1, 0.15, 0.1);
+        magazinePosition = new THREE.Vector3(0, -0.1, 0.1);
         break;
       case 'SMG':
         geometry = new THREE.BoxGeometry(0.1, 0.1, 0.6);
         material = new THREE.MeshStandardMaterial({ color: 0x222222 });
         position = new THREE.Vector3(0.25, -0.25, -0.7);
         scale = new THREE.Vector3(1.2, 1, 1);
+        magazineGeometry = new THREE.BoxGeometry(0.08, 0.12, 0.08);
+        magazinePosition = new THREE.Vector3(0, -0.1, 0.05);
         break;
       case 'PISTOL':
         geometry = new THREE.BoxGeometry(0.07, 0.15, 0.3);
         material = new THREE.MeshStandardMaterial({ color: 0x333333 });
         position = new THREE.Vector3(0.2, -0.2, -0.5);
         scale = new THREE.Vector3(1, 1, 1);
+        magazineGeometry = new THREE.BoxGeometry(0.06, 0.1, 0.06);
+        magazinePosition = new THREE.Vector3(0, -0.1, 0);
         break;
       case 'SNIPER':
         geometry = new THREE.BoxGeometry(0.08, 0.08, 1.2);
         material = new THREE.MeshStandardMaterial({ color: 0x555555 });
         position = new THREE.Vector3(0.3, -0.3, -1);
         scale = new THREE.Vector3(1, 1, 1);
+        magazineGeometry = new THREE.BoxGeometry(0.1, 0.16, 0.1);
+        magazinePosition = new THREE.Vector3(0, -0.1, 0.2);
         break;
     }
 
     this.weaponMesh = new THREE.Mesh(geometry, material);
     this.weaponMesh.position.copy(position);
     this.weaponMesh.scale.copy(scale);
+    
+    // Create magazine
+    const magazineMaterial = new THREE.MeshStandardMaterial({ color: 0x222222 });
+    this.magazineMesh = new THREE.Mesh(magazineGeometry, magazineMaterial);
+    this.magazineMesh.position.copy(magazinePosition);
+    this.weaponMesh.add(this.magazineMesh);
     
     // Add to camera to make it follow view
     this.camera.add(this.weaponMesh);
@@ -183,10 +222,15 @@ export class WeaponSystem {
     }
 
     this.currentWeapon.isReloading = true;
+    this.reloadAnimationStartTime = performance.now();
     this.reloadTimeout = window.setTimeout(
       () => this.completeReload(),
       this.currentWeapon.stats.reloadTime * 1000
     );
+    
+    // Add start reload camera jerk effect
+    this.applyCameraJerkEffect(0.02, 0.01);
+    
     return true;
   }
 
@@ -200,6 +244,23 @@ export class WeaponSystem {
     this.currentWeapon.totalAmmo -= ammoAvailable;
     this.currentWeapon.isReloading = false;
     this.reloadTimeout = null;
+    this.reloadAnimationStartTime = null;
+    
+    // Add completion reload camera jerk effect
+    this.applyCameraJerkEffect(0.015, 0.02);
+  }
+
+  // Apply a quick jerk effect to the camera - optimized
+  private applyCameraJerkEffect(x: number, y: number): void {
+    // Less intense jerk effect to reduce visual impact and performance cost
+    const randomX = (Math.random() - 0.5) * 2 * x * 0.8;
+    const randomY = -Math.abs(y) * 0.8;
+    
+    this.cameraJerkEffect = new THREE.Vector3(randomX, randomY, 0);
+    
+    // Apply initial jerk directly without extra operations
+    this.camera.rotation.x += this.cameraJerkEffect.y;
+    this.camera.rotation.y += this.cameraJerkEffect.x;
   }
 
   public shoot(): boolean {
@@ -339,6 +400,30 @@ export class WeaponSystem {
   }
 
   public update(deltaTime: number): void {
+    // Update camera jerk effect - optimize this code
+    if (this.cameraJerkEffect && this.cameraJerkEffect.length() > 0.0001) {
+      // Apply camera jerk recovery
+      const recovery = Math.min(1, this.cameraJerkDecay * deltaTime);
+      
+      // Reduce jerk effect over time - simplified calculation
+      this.cameraJerkEffect.multiplyScalar(Math.max(0, 1 - recovery));
+      
+      // Apply recovery only if effect is significant enough
+      if (this.cameraJerkEffect.length() > 0.001) {
+        // Apply smooth recovery directly without redundant calculations
+        WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.xAxis, -this.cameraJerkEffect.y * recovery);
+        this.camera.quaternion.multiply(WeaponSystem.tempQuaternion);
+        
+        WeaponSystem.tempQuaternion.setFromAxisAngle(WeaponSystem.yAxis, -this.cameraJerkEffect.x * recovery);
+        this.camera.quaternion.multiply(WeaponSystem.tempQuaternion);
+        
+        this.camera.rotation.setFromQuaternion(this.camera.quaternion);
+      } else {
+        // Clear effect when it's small enough
+        this.cameraJerkEffect = null;
+      }
+    }
+
     // Update recoil recovery
     if (this.currentWeapon && this.weaponState.currentRecoil.length() > 0) {
       const recovery = this.currentWeapon.stats.recoilRecoverySpeed * deltaTime;
@@ -366,14 +451,83 @@ export class WeaponSystem {
       }
     }
 
-    // Update weapon model position when aiming
+    // Update weapon model position when aiming or reloading
     if (this.weaponMesh) {
-      const targetPosition = this.weaponState.isAiming
-        ? new THREE.Vector3(0, -0.2, -0.5) // Aim position
-        : new THREE.Vector3(0.3, -0.3, -0.8); // Hip position
+      let targetPosition;
+      const targetRotation = new THREE.Euler(0, 0, 0);
+      
+      if (this.currentWeapon?.isReloading && this.reloadAnimationStartTime !== null) {
+        // Calculate reload progress (0 to 1)
+        const elapsedTime = (performance.now() - this.reloadAnimationStartTime) / 1000;
+        const reloadDuration = this.currentWeapon.stats.reloadTime;
+        const progress = Math.min(elapsedTime / reloadDuration, 1);
+        
+        // Animate the magazine during reload - optimize animation
+        if (this.magazineMesh) {
+          // Simplified animation with fewer phase calculations
+          if (progress < 0.4) {
+            // Magazine moving out - dropping down and rotating
+            const dropProgress = progress / 0.4;
+            this.magazineMesh.position.y = this.getMagazineOriginForWeapon(this.currentWeapon.type).y - (dropProgress * 0.3);
+            this.magazineMesh.rotation.x = dropProgress * 0.2;
+            this.magazineMesh.visible = true;
+          } else if (progress < 0.6) {
+            // Magazine out - not visible
+            this.magazineMesh.visible = false;
+          } else {
+            // New magazine coming in - simplified calculation
+            const insertProgress = (progress - 0.6) / 0.4;
+            this.magazineMesh.position.y = this.getMagazineOriginForWeapon(this.currentWeapon.type).y - ((1 - insertProgress) * 0.3);
+            this.magazineMesh.rotation.x = (1 - insertProgress) * 0.2;
+            this.magazineMesh.visible = true;
+            
+            // Less frequent effect creation - only run once at 85% completion
+            if (insertProgress > 0.84 && insertProgress < 0.87) {
+              this.createMagazineInsertEffect();
+            }
+          }
+        }
+        
+        // Create reload animation based on weapon type - simplified animations
+        switch (this.currentWeapon.type) {
+          case 'RIFLE':
+          case 'SMG': {
+            // Simplified reload animation
+            targetPosition = new THREE.Vector3(0.4, -0.1, -0.6);
+            // Use simpler sin calculation
+            const tiltAmount = Math.sin(progress * Math.PI) * 0.5; 
+            targetRotation.z = tiltAmount;
+            targetRotation.x = tiltAmount * 0.2; // Reduced from 0.3
+            break;
+          }
+          case 'PISTOL':
+            targetPosition = new THREE.Vector3(0.4, -0.4, -0.6);
+            targetRotation.z = Math.sin(progress * Math.PI) * 0.25; // Reduced from 0.3
+            break;
+          case 'SNIPER':
+            targetPosition = new THREE.Vector3(0.5, -0.3, -0.7);
+            targetRotation.z = Math.sin(progress * Math.PI) * 0.3; // Reduced from 0.4
+            targetRotation.y = Math.sin(progress * Math.PI) * 0.15; // Reduced from 0.2
+            break;
+          default:
+            targetPosition = new THREE.Vector3(0.3, -0.3, -0.8);
+            break;
+        }
+      } else {
+        // Regular aiming/hip position
+        targetPosition = this.weaponState.isAiming
+          ? new THREE.Vector3(0, -0.2, -0.5) // Aim position
+          : new THREE.Vector3(0.3, -0.3, -0.8); // Hip position
+      }
 
-      // Smoothly interpolate to target position
-      this.weaponMesh.position.lerp(targetPosition, 5 * deltaTime);
+      // Less aggressive interpolation (reduced from 5 to 4)
+      const lerpFactor = 4 * deltaTime;
+      this.weaponMesh.position.lerp(targetPosition, lerpFactor);
+      
+      // Smoother rotation with less aggressive interpolation
+      this.weaponMesh.rotation.x += (targetRotation.x - this.weaponMesh.rotation.x) * lerpFactor;
+      this.weaponMesh.rotation.y += (targetRotation.y - this.weaponMesh.rotation.y) * lerpFactor;
+      this.weaponMesh.rotation.z += (targetRotation.z - this.weaponMesh.rotation.z) * lerpFactor;
     }
   }
 
@@ -411,10 +565,152 @@ export class WeaponSystem {
       this.reloadTimeout = null;
     }
     
+    this.reloadAnimationStartTime = null;
+    this.cameraJerkEffect = null;
+    
+    // Clean up particle pool
+    this.particlePool.forEach(particle => {
+      if (particle.parent) {
+        particle.parent.remove(particle);
+      }
+    });
+    
     // Remove weapon model
     if (this.weaponMesh && this.weaponMesh.parent) {
       this.weaponMesh.parent.remove(this.weaponMesh);
       this.weaponMesh = null;
+      this.magazineMesh = null;
     }
+  }
+
+  // Helper method to get original magazine position based on weapon type
+  private getMagazineOriginForWeapon(type: WeaponType): THREE.Vector3 {
+    switch (type) {
+      case 'RIFLE':
+        return new THREE.Vector3(0, -0.1, 0.1);
+      case 'SMG':
+        return new THREE.Vector3(0, -0.1, 0.05);
+      case 'PISTOL':
+        return new THREE.Vector3(0, -0.1, 0);
+      case 'SNIPER':
+        return new THREE.Vector3(0, -0.1, 0.2);
+      default:
+        return new THREE.Vector3(0, -0.1, 0);
+    }
+  }
+
+  // Create a visual effect when inserting a new magazine
+  private createMagazineInsertEffect(): void {
+    if (!this.weaponMesh || !this.magazineMesh) return;
+    
+    // Throttle effect to prevent multiple calls in short succession
+    const now = performance.now();
+    if (now - this.lastInsertEffectTime < 250) return; // Increased throttle time
+    this.lastInsertEffectTime = now;
+    
+    // Create a more visible light effect since we're not changing magazine color
+    const light = new THREE.PointLight(0x66aaff, 1.5, 0.5);
+    light.position.copy(this.magazineMesh.position);
+    this.weaponMesh.add(light);
+    
+    // Remove magazine glow effect completely - magazine should stay the original color
+    
+    // Use more particles to compensate for removed magazine glow
+    const particleCount = 2; // Always use 2 particles
+    
+    for (let i = 0; i < particleCount; i++) {
+      if (i >= this.particlePool.length) break;
+      
+      const particle = this.particlePool[i];
+      if (!particle.parent) {
+        this.weaponMesh.add(particle);
+      }
+      
+      // Reset particle state
+      particle.visible = true;
+      const material = particle.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.9; // Slightly more visible
+      
+      // Position around the magazine
+      particle.position.copy(this.magazineMesh.position);
+      particle.position.x += (Math.random() - 0.5) * 0.05;
+      particle.position.y += (Math.random() - 0.5) * 0.05;
+      particle.position.z += (Math.random() - 0.5) * 0.05;
+      
+      // More distinctive particle movement
+      const direction = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.03,
+        0.025 + Math.random() * 0.015,  // More noticeable upward movement
+        (Math.random() - 0.5) * 0.03
+      );
+      
+      // Animation frames
+      let frameCount = 0;
+      const maxFrames = 12; // Slightly longer animation
+      
+      const animateParticle = () => {
+        if (frameCount >= maxFrames || !particle.parent) {
+          particle.visible = false;
+          return;
+        }
+        
+        // Move particle
+        particle.position.add(direction);
+        
+        // Fade out
+        material.opacity = 0.9 * (1 - frameCount / maxFrames);
+        
+        // Continue animation
+        frameCount++;
+        setTimeout(animateParticle, 20);
+      };
+      
+      // Start animation
+      animateParticle();
+    }
+    
+    // Add a small flash effect at magazine position
+    const flashGeometry = new THREE.SphereGeometry(0.05, 6, 6);
+    const flashMaterial = new THREE.MeshBasicMaterial({
+      color: 0x99ccff,
+      transparent: true,
+      opacity: 0.7
+    });
+    
+    const flashMesh = new THREE.Mesh(flashGeometry, flashMaterial);
+    flashMesh.position.copy(this.magazineMesh.position);
+    this.weaponMesh.add(flashMesh);
+    
+    // Animate flash expanding and fading
+    let flashScale = 1.0;
+    let flashOpacity = 0.7;
+    
+    const animateFlash = () => {
+      if (flashOpacity <= 0.05 || !flashMesh.parent) {
+        if (flashMesh.parent) {
+          flashMesh.parent.remove(flashMesh);
+        }
+        return;
+      }
+      
+      // Expand and fade
+      flashScale += 0.15;
+      flashOpacity -= 0.1;
+      
+      flashMesh.scale.set(flashScale, flashScale, flashScale);
+      flashMaterial.opacity = flashOpacity;
+      
+      setTimeout(animateFlash, 16);
+    };
+    
+    // Start flash animation
+    setTimeout(animateFlash, 10);
+    
+    // Remove light after a short delay
+    setTimeout(() => {
+      if (light.parent) {
+        light.parent.remove(light);
+      }
+    }, 150);
   }
 } 
