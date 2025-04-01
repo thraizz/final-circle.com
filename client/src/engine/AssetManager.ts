@@ -72,7 +72,7 @@ export class AssetManager {
   private onCompleteCallback: (() => void) | null = null;
   private cacheSize: number = 0;
   private maxCacheSize: number = 1024 * 1024 * 100; // 100 MB default cache size
-  private currentCacheSize: number = 0;
+  private lruList: string[] = [];
   private loadingPaused: boolean = false;
   private defaultOptions: AssetLoadOptions = {
     priority: AssetPriority.MEDIUM,
@@ -338,7 +338,7 @@ export class AssetManager {
     return fetch(url)
       .then(response => response.text())
       .then(data => {
-        return { type: 'shader', url };
+        return { type: 'shader', url, content: data };
       })
       .catch(error => {
         console.error(`Failed to load shader: ${url}`, error);
@@ -508,20 +508,26 @@ export class AssetManager {
   /**
    * Preloads assets of a certain priority level
    */
-  public preloadAssets(priorityLevel: AssetPriority): void {
-    for (const [id, asset] of this.assets.entries()) {
-      if (asset.priority <= priorityLevel && asset.status === AssetStatus.UNLOADED) {
-        // Remove if already in queue
-        this.loadingQueue = this.loadingQueue.filter(assetId => assetId !== id);
-        // Add to front of queue
-        this.loadingQueue.unshift(id);
+  public preloadAssets(priorityLevelOrAssetIds: AssetPriority | string[]): void {
+    if (Array.isArray(priorityLevelOrAssetIds)) {
+      // Handle array of asset IDs
+      const assetIds = priorityLevelOrAssetIds;
+      for (const id of assetIds) {
+        const asset = this.assets.get(id);
+        if (asset && asset.status === AssetStatus.UNLOADED) {
+          this.queueAssetForLoading(id);
+        }
+      }
+    } else {
+      // Handle priority level
+      const priorityLevel = priorityLevelOrAssetIds;
+      for (const [id, asset] of this.assets) {
+        if (asset.priority === priorityLevel && asset.status === AssetStatus.UNLOADED) {
+          this.queueAssetForLoading(id);
+        }
       }
     }
     
-    // Resort queue
-    this.sortQueue();
-    
-    // Start loading if not already
     if (!this.isLoading) {
       this.startLoading();
     }
@@ -628,15 +634,6 @@ export class AssetManager {
   public resumeLoading(): void {
     this.loadingPaused = false;
     this.processLoadingQueue();
-  }
-  
-  /**
-   * Preload a group of assets (e.g. for next level)
-   */
-  public preloadAssets(assetIds: string[]): void {
-    for (const id of assetIds) {
-      this.queueAssetForLoading(id);
-    }
   }
   
   // Simulated asset loaders

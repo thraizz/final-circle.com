@@ -104,30 +104,9 @@ export const NetworkConditions = {
 };
 
 /**
- * Message types for simulated WebSocket
- */
-enum MessageType {
-  OPEN = 'open',
-  MESSAGE = 'message',
-  ERROR = 'error',
-  CLOSE = 'close',
-}
-
-/**
- * Interface for messages in the simulation queue
- */
-interface SimulatedMessage {
-  type: MessageType;
-  data?: any;
-  event?: Event;
-  code?: number;
-  reason?: string;
-}
-
-/**
  * Type for event listeners
  */
-type EventCallback = (event: any) => void;
+type EventCallback = (event: Event | MessageEvent | CloseEvent) => void;
 
 /**
  * Mock WebSocket class that simulates network conditions
@@ -140,15 +119,12 @@ export class MockWebSocket {
   extensions: string;
   binaryType: BinaryType;
   
-  private _isConnecting: boolean;
   private _isConnected: boolean;
   private _isClosed: boolean;
   private _conditions: NetworkCondition;
-  private _messageQueue: Array<SimulatedMessage>;
   private _eventListeners: {[key: string]: EventCallback[]};
   private _sendBuffer: number;
   private _bandwidthInterval: number | null;
-  private _lastMessageTime: number;
   private _originalWebSocket: WebSocket | null;
   private _bandwidthThrottleTimeout: ReturnType<typeof setTimeout> | null;
   
@@ -158,6 +134,12 @@ export class MockWebSocket {
   static readonly CLOSING = 2;
   static readonly CLOSED = 3;
   
+  // Event handlers with proper types
+  onopen: ((ev: Event) => void) | null = null;
+  onmessage: ((ev: MessageEvent) => void) | null = null;
+  onerror: ((ev: Event) => void) | null = null;
+  onclose: ((ev: CloseEvent) => void) | null = null;
+  
   constructor(url: string, protocols?: string | string[], conditions: NetworkCondition = NetworkConditions.PERFECT) {
     this.url = url;
     this.protocol = protocols || '';
@@ -166,11 +148,9 @@ export class MockWebSocket {
     this.extensions = '';
     this.binaryType = 'blob';
     
-    this._isConnecting = true;
     this._isConnected = false;
     this._isClosed = false;
     this._conditions = conditions;
-    this._messageQueue = [];
     this._eventListeners = {
       'open': [],
       'message': [],
@@ -179,7 +159,6 @@ export class MockWebSocket {
     };
     this._sendBuffer = 0;
     this._bandwidthInterval = null;
-    this._lastMessageTime = 0;
     this._originalWebSocket = null;
     this._bandwidthThrottleTimeout = null;
     
@@ -197,44 +176,32 @@ export class MockWebSocket {
     }
   }
   
-  // Event handlers
-  onopen: ((this: WebSocket, ev: Event) => any) | null = null;
-  onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null = null;
-  onerror: ((this: WebSocket, ev: Event) => any) | null = null;
-  onclose: ((this: WebSocket, ev: CloseEvent) => any) | null = null;
-  
   /**
    * Simulates the connection process with latency
    */
   private _connect(): void {
-    // Simulate connection latency
-    const connectLatency = this._getRandomLatency();
+    // Simulate random connection delay
+    const delay = this._getRandomLatency();
     
     setTimeout(() => {
-      // Random connection failure based on packet loss
       if (Math.random() < this._conditions.packetLoss) {
+        // Connection failed due to packet loss
         this.readyState = MockWebSocket.CLOSED;
         this._isClosed = true;
-        this._isConnecting = false;
-        
-        const errorEvent = new Event('error');
-        this._triggerError(new Error('Connection failed'));
-        
-        setTimeout(() => {
-          this._triggerClose(1006, 'Connection failed');
-        }, 0);
-        
+        this.dispatchEvent(new Event('error'));
+        this.dispatchEvent(new CloseEvent('close', { 
+          wasClean: false, 
+          code: 1006,
+          reason: 'Connection failed due to packet loss'
+        }));
         return;
       }
       
-      // Successful connection
+      // Connection successful
       this.readyState = MockWebSocket.OPEN;
       this._isConnected = true;
-      this._isConnecting = false;
-      
-      // Trigger open event
-      this._triggerOpen();
-    }, connectLatency);
+      this.dispatchEvent(new Event('open'));
+    }, delay);
   }
   
   /**
@@ -336,32 +303,28 @@ export class MockWebSocket {
    * Dispatches an event
    */
   dispatchEvent(event: Event): boolean {
-    const type = event.type;
+    const listeners = this._eventListeners[event.type] || [];
     
-    // Call the specific handler if it exists
-    switch (type) {
+    // Call the specific event handler if defined
+    switch (event.type) {
       case 'open':
-        if (this.onopen) this.onopen.call(this, event);
+        if (this.onopen) this.onopen(event);
         break;
       case 'message':
-        if (this.onmessage) this.onmessage.call(this, event as MessageEvent);
+        if (this.onmessage) this.onmessage(event as MessageEvent);
         break;
       case 'error':
-        if (this.onerror) this.onerror.call(this, event);
+        if (this.onerror) this.onerror(event);
         break;
       case 'close':
-        if (this.onclose) this.onclose.call(this, event as CloseEvent);
+        if (this.onclose) this.onclose(event as CloseEvent);
         break;
     }
     
-    // Call listeners
-    if (this._eventListeners[type]) {
-      for (const listener of this._eventListeners[type]) {
-        listener.call(this, event);
-      }
-    }
+    // Call all registered event listeners
+    listeners.forEach(listener => listener(event));
     
-    return true;
+    return !event.defaultPrevented;
   }
   
   /**
@@ -397,7 +360,7 @@ export class MockWebSocket {
           setTimeout(() => {
             console.log('[NetworkSimulator] Attempting reconnection');
             this.readyState = MockWebSocket.CONNECTING;
-            this._isConnecting = true;
+            this._isConnected = false;
             this._isClosed = false;
             this._connect();
           }, this._conditions.reconnectDelay);
@@ -453,21 +416,6 @@ export class MockWebSocket {
   }
   
   /**
-   * Triggers open event
-   */
-  private _triggerOpen(): void {
-    const event = new Event('open');
-    this.dispatchEvent(event);
-  }
-  
-  /**
-   * Triggers message event
-   */
-  private _triggerMessage(data: any): void {
-    const event = new MessageEvent('message', { data });
-    this.dispatchEvent(event);
-  }
-  
   /**
    * Triggers error event
    */
@@ -507,6 +455,10 @@ export class MockWebSocket {
   }
 }
 
+interface ExtendedWindow extends Window {
+  WebSocket: typeof WebSocket;
+}
+
 /**
  * Network Simulator that replaces the global WebSocket with a mock
  */
@@ -533,9 +485,9 @@ export class NetworkSimulator {
     this.isActive = true;
     
     // Replace global WebSocket with our mock
-    (window as any).WebSocket = (url: string, protocols?: string | string[]) => {
+    (window as ExtendedWindow).WebSocket = ((url: string, protocols?: string | string[]) => {
       return this.createMockWebSocket(url, protocols);
-    };
+    }) as unknown as typeof WebSocket;
     
     console.log('[NetworkSimulator] Enabled with conditions:', this.condition);
   }

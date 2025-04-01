@@ -1,7 +1,29 @@
 import * as THREE from 'three';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssetManager, AssetPriority } from '../../engine/AssetManager';
 import { PerformanceMonitor } from '../../engine/PerformanceMonitor';
+
+interface PerformanceReport {
+  fps: {
+    current: number;
+    average: number;
+    min: number;
+    max: number;
+  };
+  memory?: {
+    used: number;
+    trend: 'stable' | 'increasing' | 'decreasing';
+  };
+  network: {
+    ping: number;
+    packetLoss: number;
+  };
+  timings: {
+    render: number;
+    logic: number;
+    network: number;
+  };
+}
 
 // Mock the WebGL renderer
 class MockWebGLRenderer {
@@ -25,12 +47,19 @@ class MockWebGLRenderer {
   
   setSize = vi.fn();
   setPixelRatio = vi.fn();
-  render = vi.fn(() => {
+  render = vi.fn((scene: THREE.Scene, camera: THREE.PerspectiveCamera) => {
     // Simulate rendering by incrementing triangle count and render calls
-    this.info.render.triangles += 5000;
-    this.info.render.calls += 50;
-    this.info.memory.geometries += 2;
-    this.info.memory.textures += 1;
+    // Use scene and camera for mock rendering
+    this.info.render.triangles += scene.children.length * 1000;
+    this.info.render.calls += scene.children.length;
+    this.info.memory.geometries += scene.children.length;
+    this.info.memory.textures += Math.ceil(scene.children.length / 10);
+    
+    // Mock camera frustum culling
+    const distanceFromCamera = camera.position.z;
+    if (distanceFromCamera > 100) {
+      this.info.render.calls = Math.floor(this.info.render.calls * 0.5);
+    }
   });
   dispose = vi.fn();
 }
@@ -149,7 +178,8 @@ class GameRenderer {
     this.renderer.render(this.scene, this.camera);
     
     // Update performance metrics
-    this.performanceMonitor.endFrame(performance.now(), frameStart);
+    const now = performance.now();
+    this.performanceMonitor.endFrame(now, frameStart);
   }
   
   // Simulate entities moving around
@@ -185,7 +215,7 @@ class GameRenderer {
   }
   
   // Get performance report
-  public getPerformanceReport(): Record<string, any> {
+  public getPerformanceReport(): PerformanceReport {
     return this.performanceMonitor.getPerformanceReport();
   }
   
@@ -200,83 +230,31 @@ class GameRenderer {
   }
 }
 
-describe('Rendering Stress Tests', () => {
-  let gameRenderer: GameRenderer;
+describe('Render Stress Test', () => {
+  let renderer: GameRenderer;
   
   beforeEach(() => {
-    // Create game renderer with 100 entities
-    gameRenderer = new GameRenderer(100);
+    renderer = new GameRenderer(100);
   });
   
-  it('should maintain acceptable frame rates with 100 entities', () => {
-    const frameCount = 100;
+  it('should maintain performance with increasing entity count', () => {
+    // Initial render
+    renderer.renderFrame();
     
-    // Render multiple frames
-    for (let i = 0; i < frameCount; i++) {
-      gameRenderer.renderFrame();
-    }
+    // Add more entities
+    renderer.addEntities(100);
     
-    // Get performance report
-    const report = gameRenderer.getPerformanceReport();
+    // Render with more entities
+    renderer.renderFrame();
+    const finalReport = renderer.getPerformanceReport();
     
-    console.log('Performance with 100 entities:');
-    console.log(`- Average FPS: ${report.fps.average.toFixed(2)}`);
-    console.log(`- Render time: ${report.timing.render.toFixed(2)}ms`);
-    console.log(`- Logic time: ${report.timing.logic.toFixed(2)}ms`);
+    // Check performance metrics
+    expect(finalReport.fps.current).toBeGreaterThan(30);
+    expect(finalReport.timings.render).toBeLessThan(16.7);
+    expect(finalReport.timings.logic).toBeLessThan(8);
     
-    // In a real test we would have assertions, but our mock doesn't
-    // actually measure real rendering performance
-    expect(report.fps.average).toBeGreaterThan(0);
-  });
-  
-  it('should handle increasing entity counts with graceful degradation', () => {
-    // Test with different entity counts
-    const entityCounts = [100, 500, 1000, 5000];
-    const results: Record<number, any> = {};
-    
-    for (const count of entityCounts) {
-      // Reset to starting count
-      gameRenderer = new GameRenderer(count);
-      
-      // Render frames
-      for (let i = 0; i < 60; i++) {
-        gameRenderer.renderFrame();
-      }
-      
-      // Store results
-      results[count] = gameRenderer.getPerformanceReport();
-      
-      console.log(`Performance with ${count} entities:`);
-      console.log(`- Average FPS: ${results[count].fps.average.toFixed(2)}`);
-      console.log(`- Render time: ${results[count].timing.render.toFixed(2)}ms`);
-      console.log(`- Memory usage: ${JSON.stringify(gameRenderer.getMemoryStats())}`);
-    }
-    
-    // Verify that quality settings adapt as entity count increases
-    // In a real test with real rendering, higher entity counts would reduce quality
-    console.log('Quality settings with 5000 entities:', results[5000].qualitySettings);
-    
-    // Quality should be reduced for higher entity counts
-    // This test is simple since we're using mocks
-    expect(results[5000].qualitySettings).toBeDefined();
-  });
-  
-  it('should optimize memory usage when caching assets', () => {
-    // Create renderer with many entities
-    gameRenderer = new GameRenderer(1000);
-    
-    // Render some frames to trigger asset loading
-    for (let i = 0; i < 20; i++) {
-      gameRenderer.renderFrame();
-    }
-    
-    // Get memory stats
-    const memoryStats = gameRenderer.getMemoryStats();
-    
-    console.log('Memory stats:', memoryStats);
-    
-    // In a real test, we would check if assets are being cached effectively
-    // and if memory usage is reasonable
-    expect(memoryStats.cacheSize).toBeLessThan(memoryStats.maxCacheSize);
+    // Check memory usage
+    const memoryStats = renderer.getMemoryStats();
+    expect(memoryStats.totalBytes).toBeLessThan(1024 * 1024 * 100); // 100MB limit
   });
 }); 

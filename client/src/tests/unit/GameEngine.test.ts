@@ -1,6 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../../engine/GameEngine';
 
+interface MockWebSocket {
+  send: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+  readyState: number;
+  onopen: ((ev: Event) => void) | null;
+  onclose: ((ev: CloseEvent) => void) | null;
+  onerror: ((ev: Event) => void) | null;
+  onmessage: ((ev: MessageEvent) => void) | null;
+}
+
+declare global {
+  interface Window {
+    WebSocket: typeof WebSocket;
+  }
+}
+
 // Mock dependencies
 vi.mock('three', () => {
   const actualThree = vi.importActual('three');
@@ -73,7 +89,7 @@ vi.mock('./PlayerControls', () => ({
 
 describe('GameEngine', () => {
   let gameEngine: GameEngine;
-  let mockWebSocket: any;
+  let mockWebSocket: MockWebSocket;
   
   // Create a mock for WebSocket
   beforeEach(() => {
@@ -88,11 +104,19 @@ describe('GameEngine', () => {
       onmessage: null,
     };
     
-    // Mock global WebSocket constructor
-    global.WebSocket = vi.fn().mockImplementation(() => mockWebSocket);
+    // Mock window WebSocket constructor
+    const MockWebSocketClass = vi.fn(() => mockWebSocket) as unknown as typeof WebSocket;
+    Object.defineProperties(MockWebSocketClass, {
+      CONNECTING: { value: WebSocket.CONNECTING },
+      OPEN: { value: WebSocket.OPEN },
+      CLOSING: { value: WebSocket.CLOSING },
+      CLOSED: { value: WebSocket.CLOSED },
+    });
+    
+    window.WebSocket = MockWebSocketClass;
     
     // Mock window.requestAnimationFrame
-    global.requestAnimationFrame = vi.fn().mockImplementation(callback => {
+    window.requestAnimationFrame = vi.fn().mockImplementation(callback => {
       setTimeout(() => callback(performance.now()), 0);
       return 0;
     });
@@ -110,13 +134,13 @@ describe('GameEngine', () => {
   
   it('should initialize correctly', () => {
     expect(gameEngine).toBeDefined();
-    expect(global.WebSocket).toHaveBeenCalledWith('ws://localhost:8080/ws');
+    expect(window.WebSocket).toHaveBeenCalledWith('ws://localhost:8080/ws');
     expect(document.body.appendChild).toHaveBeenCalled();
   });
   
   it('should handle WebSocket connection open event', () => {
     // Simulate WebSocket open event
-    if (mockWebSocket.onopen) mockWebSocket.onopen({});
+    if (mockWebSocket.onopen) mockWebSocket.onopen(new Event('open'));
     
     // Verify connection is established
     expect(gameEngine.socketReconnecting).toBe(false);
@@ -124,19 +148,19 @@ describe('GameEngine', () => {
   
   it('should handle WebSocket connection close event', () => {
     // Mock setTimeout
-    const originalSetTimeout = global.setTimeout;
-    global.setTimeout = vi.fn().mockImplementation((fn, timeout) => {
+    const originalSetTimeout = window.setTimeout;
+    window.setTimeout = vi.fn().mockImplementation((fn) => {
       return originalSetTimeout(fn, 0);
     });
     
     // Simulate WebSocket close event
-    if (mockWebSocket.onclose) mockWebSocket.onclose({ code: 1000, reason: 'Test close' });
+    if (mockWebSocket.onclose) mockWebSocket.onclose(new CloseEvent('close', { code: 1000, reason: 'Test close' }));
     
     // Verify reconnection attempt
     expect(gameEngine.socketReconnecting).toBe(true);
     
     // Restore setTimeout
-    global.setTimeout = originalSetTimeout;
+    window.setTimeout = originalSetTimeout;
   });
   
   // Add more tests for player actions, game state updates, etc.

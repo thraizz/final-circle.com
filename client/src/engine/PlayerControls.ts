@@ -4,10 +4,18 @@ import { PlayerAction } from '../types/game';
 import { ShotInfo } from '../types/weapons';
 import { WeaponSystem } from './WeaponSystem';
 
+// Define the collision info interface
+interface CollisionInfo {
+  collided: boolean;
+  normal?: THREE.Vector3;
+  penetration?: number;
+  obstacle?: THREE.Mesh;
+}
+
 export class PlayerControls {
-  private moveSpeed: number = 5;
-  private sprintSpeed: number = 10;
-  private jumpForce: number = 10;
+  private moveSpeed: number = 6;
+  private sprintSpeed: number = 12;
+  private jumpForce: number = 6.5;
   private isJumping: boolean = false;
   private isSprinting: boolean = false;
   private velocity: Vector3 = new THREE.Vector3();
@@ -58,6 +66,10 @@ export class PlayerControls {
     x: 0, // Pitch (up/down)
     y: 0  // Yaw (left/right)
   };
+
+  // Add inertia parameters
+  private acceleration: number = 20.0; // How quickly player reaches target speed
+  private friction: number = 10.0; // How quickly player slows down when not pressing movement keys
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -368,19 +380,37 @@ export class PlayerControls {
       this.weaponSystem.setMoving(this.isMoving);
     }
     
-    // Apply movement to velocity - use sprint speed if sprinting
+    // Apply movement to velocity with inertia - use sprint speed if sprinting
     const currentSpeed = this.isSprinting ? this.sprintSpeed : this.moveSpeed;
-    this.velocity.x = PlayerControls.moveDirection.x * currentSpeed;
-    this.velocity.z = PlayerControls.moveDirection.z * currentSpeed;
     
-    // Apply jumping
+    // Calculate target velocity based on input
+    const targetVelocityX = PlayerControls.moveDirection.x * currentSpeed;
+    const targetVelocityZ = PlayerControls.moveDirection.z * currentSpeed;
+    
+    // Apply acceleration or friction based on input
+    if (this.isMoving) {
+      // Accelerate toward target velocity
+      this.velocity.x += (targetVelocityX - this.velocity.x) * Math.min(this.acceleration * deltaTime, 1.0);
+      this.velocity.z += (targetVelocityZ - this.velocity.z) * Math.min(this.acceleration * deltaTime, 1.0);
+    } else {
+      // Apply friction to slow down when not moving
+      const frictionFactor = Math.min(this.friction * deltaTime, 1.0);
+      this.velocity.x *= (1 - frictionFactor);
+      this.velocity.z *= (1 - frictionFactor);
+      
+      // Snap to zero if very small to prevent sliding forever
+      if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
+      if (Math.abs(this.velocity.z) < 0.01) this.velocity.z = 0;
+    }
+    
+    // Apply jumping - unchanged but now with lower jump force
     if (this.isJumping && this.canJump) {
       this.velocity.y = this.jumpForce;
       this.canJump = false;
     }
     
-    // Apply gravity
-    this.velocity.y -= 9.8 * deltaTime;
+    // Apply higher gravity for faster, more realistic falling
+    this.velocity.y -= 12.0 * deltaTime; // Increased from 9.8
     
     // Calculate new position
     PlayerControls.newPosition.copy(this.player.position);
@@ -389,7 +419,9 @@ export class PlayerControls {
     PlayerControls.newPosition.z += this.velocity.z * deltaTime;
     
     // Check for collisions
-    if (!this.checkCollision(PlayerControls.newPosition)) {
+    const collisionInfo = this.checkCollision(PlayerControls.newPosition);
+    
+    if (!collisionInfo.collided) {
       this.player.position.copy(PlayerControls.newPosition);
       
       // Reset jump state if on ground
@@ -423,16 +455,46 @@ export class PlayerControls {
         });
       }
     } else {
-      // Handle collision response
-      // This is a simplified approach
-      this.velocity.set(0, this.velocity.y, 0);
+      // Handle collision response with sliding
+      if (collisionInfo.normal) {
+        // Calculate the component of velocity along the collision normal
+        const dotProduct = this.velocity.dot(collisionInfo.normal);
+        
+        // Create a new velocity that removes the component in the direction of the normal
+        const tempVector = new THREE.Vector3();
+        tempVector.copy(collisionInfo.normal).multiplyScalar(dotProduct);
+        
+        // Subtract the normal component to get a sliding velocity
+        this.velocity.sub(tempVector);
+        
+        // Apply the sliding velocity
+        PlayerControls.newPosition.copy(this.player.position);
+        PlayerControls.newPosition.x += this.velocity.x * deltaTime;
+        // Preserve y velocity for jumping/falling
+        PlayerControls.newPosition.y += this.velocity.y * deltaTime;
+        PlayerControls.newPosition.z += this.velocity.z * deltaTime;
+        
+        // Check if the new sliding position is valid
+        const slideCollision = this.checkCollision(PlayerControls.newPosition);
+        if (!slideCollision.collided) {
+          this.player.position.copy(PlayerControls.newPosition);
+        } else {
+          // If still colliding, just preserve the Y position and stop horizontal movement
+          this.player.position.y += this.velocity.y * deltaTime;
+          this.velocity.x = 0;
+          this.velocity.z = 0;
+        }
+      } else {
+        // Fallback to simple collision response if no normal calculated
+        this.velocity.set(0, this.velocity.y, 0);
+      }
     }
     
     // Update weapon system
     this.weaponSystem.update(deltaTime);
   }
 
-  private checkCollision(newPosition: Vector3): boolean {
+  private checkCollision(newPosition: Vector3): CollisionInfo {
     // Create player bounding box
     PlayerControls.playerBox.setFromCenterAndSize(
       new THREE.Vector3(
@@ -454,11 +516,60 @@ export class PlayerControls {
         .applyMatrix4(obstacle.matrixWorld);
       
       if (PlayerControls.playerBox.intersectsBox(PlayerControls.obstacleBox)) {
-        return true;
+        // Calculate collision normal - direction to push the player away from the obstacle
+        const playerCenter = new THREE.Vector3();
+        PlayerControls.playerBox.getCenter(playerCenter);
+        
+        const obstacleCenter = new THREE.Vector3();
+        PlayerControls.obstacleBox.getCenter(obstacleCenter);
+        
+        // Get direction from obstacle to player
+        const normal = new THREE.Vector3().subVectors(playerCenter, obstacleCenter).normalize();
+        
+        // Calculate penetration depth (approximation)
+        const playerSize = new THREE.Vector3();
+        PlayerControls.playerBox.getSize(playerSize);
+        
+        const obstacleSize = new THREE.Vector3();
+        PlayerControls.obstacleBox.getSize(obstacleSize);
+        
+        // Calculate half-extents
+        const playerHalfExtents = playerSize.clone().multiplyScalar(0.5);
+        const obstacleHalfExtents = obstacleSize.clone().multiplyScalar(0.5);
+        
+        // Calculate overlap on each axis
+        const deltaX = Math.abs(playerCenter.x - obstacleCenter.x);
+        const deltaY = Math.abs(playerCenter.y - obstacleCenter.y);
+        const deltaZ = Math.abs(playerCenter.z - obstacleCenter.z);
+        
+        const overlapX = playerHalfExtents.x + obstacleHalfExtents.x - deltaX;
+        const overlapY = playerHalfExtents.y + obstacleHalfExtents.y - deltaY;
+        const overlapZ = playerHalfExtents.z + obstacleHalfExtents.z - deltaZ;
+        
+        // Find the minimum overlap axis
+        let penetration = overlapX;
+        normal.set(Math.sign(playerCenter.x - obstacleCenter.x), 0, 0);
+        
+        if (overlapY < penetration) {
+          penetration = overlapY;
+          normal.set(0, Math.sign(playerCenter.y - obstacleCenter.y), 0);
+        }
+        
+        if (overlapZ < penetration) {
+          penetration = overlapZ;
+          normal.set(0, 0, Math.sign(playerCenter.z - obstacleCenter.z));
+        }
+        
+        return {
+          collided: true,
+          normal,
+          penetration,
+          obstacle
+        };
       }
     }
     
-    return false;
+    return { collided: false };
   }
 
   public cleanup(): void {
@@ -469,7 +580,6 @@ export class PlayerControls {
     document.removeEventListener('mouseup', this.boundMouseUp);
     document.removeEventListener('click', this.boundMouseClick);
     document.removeEventListener('contextmenu', this.boundContextMenu);
-    document.removeEventListener('pointerlockchange', this.onPointerLockChange.bind(this));
     document.removeEventListener('pointerlockerror', this.onPointerLockError.bind(this));
     
     document.exitPointerLock();
@@ -480,6 +590,11 @@ export class PlayerControls {
 
   public getWeaponSystem(): WeaponSystem {
     return this.weaponSystem;
+  }
+
+  // Add method to update obstacles dynamically
+  public updateObstacles(obstacles: THREE.Mesh[]): void {
+    this.obstacles = obstacles;
   }
 
   // Add this new method for leaning

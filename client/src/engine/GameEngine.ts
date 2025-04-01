@@ -23,7 +23,6 @@ export class GameEngine {
   private players: Map<string, THREE.Object3D>;
   private gameMap: GameMap;
   private hud: HUD;
-  private frameCount: number = 0;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private connectionReady: boolean = false;
@@ -33,7 +32,7 @@ export class GameEngine {
   constructor(hudConfig?: Partial<HUDConfig>, playerName: string = 'Player') {
     // Store player name
     this.playerName = playerName;
-    console.log(`Initializing game engine for player: ${playerName}`);
+    console.log(`Initializing game engine for player: ${this.playerName}`);
     
     // Scene setup
     this.scene = new THREE.Scene();
@@ -107,7 +106,7 @@ export class GameEngine {
     // Game map setup
     this.gameMap = new GameMap(this.scene, this.renderer);
 
-    // Player controls setup
+    // Player controls setup with obstacles from the map
     this.playerControls = new PlayerControls(
       this.camera,
       this.player,
@@ -136,7 +135,7 @@ export class GameEngine {
     
     this.socket = new WebSocket(wsURL);
     
-    this.socket.onopen = (_event) => {
+    this.socket.onopen = () => {
       console.log('WebSocket connection established');
       this.connectionReady = true;
       this.socketReconnecting = false;
@@ -213,52 +212,29 @@ export class GameEngine {
     };
   }
   
-  private handleServerMessage(data: Record<string, any>): void {
-    if (!data.type) {
-      console.error('Received message with no type', data);
-      return;
-    }
-    
+  private handleServerMessage(data: { type: string; payload: unknown }): void {
+    let initPayload: { id: string };
+    let gameStatePayload: GameState;
+    let errorPayload: ErrorMessage;
+
     switch (data.type) {
-      case 'playerId':
-        this.playerId = data.payload?.id || null;
-        console.log(`Received player ID: ${this.playerId}`);
-        
-        if (this.playerId) {
-          // Enable player controls now that we have an ID
-          this.playerControls.enableControls();
-          
-          // Send player name to server
-          this.sendMessage('setName', {
-            displayName: this.playerName
-          });
-          
-          // Start the game loop once we have our player ID
-          if (!this.isRunning) {
-            this.isRunning = true;
-            this.gameLoop();
-          }
-        } else {
-          console.error('Received empty player ID from server');
-        }
+      case 'init':
+        initPayload = data.payload as { id: string };
+        this.playerId = initPayload.id || null;
         break;
         
       case 'gameState':
-        // Only log the first few updates to avoid spamming the console
-        if (this.frameCount < 10) {
-          console.log('Received game state update', data.payload);
-          this.frameCount++;
-        }
-        this.gameState = data.payload;
-        this.updateGameState();
+        gameStatePayload = data.payload as GameState;
+        this.gameState = gameStatePayload;
         break;
         
       case 'error':
-        this.handleError(data.payload);
+        errorPayload = data.payload as ErrorMessage;
+        this.handleError(errorPayload);
         break;
         
       default:
-        console.log(`Unhandled message type: ${data.type}`, data);
+        console.warn('Unknown message type:', data.type);
     }
   }
 
@@ -298,7 +274,7 @@ export class GameEngine {
     }
   }
   
-  private sendMessage(type: string, payload: any): void {
+  private sendMessage(type: string, payload: Record<string, unknown>): void {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       const message = {
         type,
@@ -365,6 +341,15 @@ export class GameEngine {
     
     // Update HUD with game information
     this.hud.updateGameInfo(this.gameState, this.playerId);
+
+    // Ensure player controls always has the latest obstacles
+    // This is important if obstacles are added or removed dynamically
+    if (this.playerControls) {
+      const obstacles = this.gameMap.getObstacles();
+      if (obstacles && obstacles.length > 0) {
+        this.playerControls.updateObstacles(obstacles);
+      }
+    }
   }
 
   private createPlayerObject(isMainPlayer: boolean): THREE.Object3D {
@@ -411,6 +396,9 @@ export class GameEngine {
     
     // Update FPS counter
     this.hud.updateFPS();
+    
+    // Update game state - ensure obstacles are updated if they change
+    this.updateGameState();
     
     // Render the scene
     this.renderer.render(this.scene, this.camera);

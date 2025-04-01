@@ -84,23 +84,48 @@ class TestPerformance {
   }
 }
 
+interface MockMeshPosition {
+  set: ReturnType<typeof vi.fn>;
+}
+
+interface MockMesh {
+  position: MockMeshPosition;
+}
+
+interface MockInfo {
+  render: {
+    triangles: number;
+    calls: number;
+  };
+}
+
+interface MockRenderer {
+  domElement: HTMLCanvasElement;
+  shadowMap: { enabled: boolean; type: number | null };
+  info: MockInfo;
+  setSize: ReturnType<typeof vi.fn>;
+  setPixelRatio: ReturnType<typeof vi.fn>;
+  render: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+}
+
 // Mock objects for testing
-const mockMeshPosition = {
+const mockMeshPosition: MockMeshPosition = {
   set: vi.fn()
 };
 
-const mockMesh = {
+const mockMesh: MockMesh = {
   position: mockMeshPosition
 };
 
-const mockInfo = {
+const mockInfo: MockInfo = {
   render: {
     triangles: 0,
     calls: 0
   }
 };
 
-const mockRenderer = {
+const mockRenderer: MockRenderer = {
   domElement: document.createElement('canvas'),
   shadowMap: { enabled: false, type: null },
   info: mockInfo,
@@ -114,9 +139,9 @@ const mockRenderer = {
 };
 
 describe('Rendering Performance Tests', () => {
-  let scene: any;
-  let camera: any;
-  let renderer: any;
+  let scene: THREE.Scene;
+  let camera: THREE.PerspectiveCamera;
+  let renderer: THREE.WebGLRenderer;
   let performance: TestPerformance;
   
   beforeEach(() => {
@@ -124,12 +149,12 @@ describe('Rendering Performance Tests', () => {
     vi.resetAllMocks();
     
     // Setup test environment
-    scene = { clear: vi.fn(), add: vi.fn() };
+    scene = { clear: vi.fn(), add: vi.fn() } as unknown as THREE.Scene;
     camera = { 
       position: { set: vi.fn() },
       lookAt: vi.fn()
-    };
-    renderer = mockRenderer;
+    } as unknown as THREE.PerspectiveCamera;
+    renderer = mockRenderer as unknown as THREE.WebGLRenderer;
     mockInfo.render.triangles = 0;
     mockInfo.render.calls = 0;
     performance = new TestPerformance();
@@ -138,9 +163,9 @@ describe('Rendering Performance Tests', () => {
     vi.mocked(THREE.Scene).mockImplementation(() => scene);
     vi.mocked(THREE.PerspectiveCamera).mockImplementation(() => camera);
     vi.mocked(THREE.WebGLRenderer).mockImplementation(() => renderer);
-    vi.mocked(THREE.BoxGeometry).mockImplementation(() => ({}));
-    vi.mocked(THREE.MeshBasicMaterial).mockImplementation(() => ({}));
-    vi.mocked(THREE.Mesh).mockImplementation(() => mockMesh);
+    vi.mocked(THREE.BoxGeometry).mockImplementation(() => ({} as THREE.BoxGeometry));
+    vi.mocked(THREE.MeshBasicMaterial).mockImplementation(() => ({} as THREE.MeshBasicMaterial));
+    vi.mocked(THREE.Mesh).mockImplementation(() => mockMesh as unknown as THREE.Mesh);
     
     // Add some objects to the scene - now using mocks
     for (let i = 0; i < 100; i++) {

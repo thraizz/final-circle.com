@@ -2,6 +2,45 @@
  * Performance monitoring system for the battle royale game
  * Tracks frame rate, memory usage, and other performance metrics
  */
+interface PerformanceMemory {
+  usedJSHeapSize: number;
+  jsHeapSizeLimit: number;
+}
+
+interface ExtendedPerformance extends Performance {
+  memory?: PerformanceMemory;
+}
+
+interface QualitySettings {
+  drawDistance: number;
+  shadowQuality: 'low' | 'medium' | 'high';
+  textureQuality: 'low' | 'medium' | 'high';
+  effectsLevel: 'low' | 'medium' | 'high';
+  antialiasing: boolean;
+}
+
+interface PerformanceReport {
+  fps: {
+    current: number;
+    average: number;
+    min: number;
+    max: number;
+  };
+  memory?: {
+    used: number;
+    trend: 'stable' | 'increasing' | 'decreasing';
+  };
+  network: {
+    ping: number;
+    packetLoss: number;
+  };
+  timings: {
+    render: number;
+    logic: number;
+    network: number;
+  };
+}
+
 export class PerformanceMonitor {
   private fpsHistory: number[] = [];
   private fpsUpdateInterval: number = 500; // ms
@@ -16,12 +55,11 @@ export class PerformanceMonitor {
   private memoryUpdateInterval: number = 5000; // ms
   private lastMemoryUpdate: number = 0;
   private pingHistory: {timestamp: number, ping: number}[] = [];
-  private lastPingTime: number = 0;
   private pingsSent: number = 0;
   private pingsReceived: number = 0;
   
   // Settings that can be adjusted based on performance
-  private qualitySettings = {
+  private qualitySettings: QualitySettings = {
     drawDistance: 1000,
     shadowQuality: 'high',
     textureQuality: 'high',
@@ -39,7 +77,7 @@ export class PerformanceMonitor {
   
   constructor() {
     this.isPerformanceApiSupported = typeof performance !== 'undefined' && 
-      typeof performance.memory !== 'undefined';
+      typeof (performance as ExtendedPerformance).memory !== 'undefined';
     
     // Keep FPS history for the last 60 seconds (120 samples at 500ms interval)
     this.fpsHistory = new Array(120).fill(0);
@@ -140,7 +178,6 @@ export class PerformanceMonitor {
    * Called when sending a ping
    */
   public sendPing(): void {
-    this.lastPingTime = performance.now();
     this.pingsSent++;
   }
   
@@ -150,8 +187,9 @@ export class PerformanceMonitor {
   private updateMemoryUsage(): void {
     if (!this.isPerformanceApiSupported) return;
     
-    // Using TypeScript's non-null assertion since we checked for support
-    const memory = (performance as any).memory!;
+    const memory = (performance as ExtendedPerformance).memory;
+    if (!memory) return;
+
     const used = memory.usedJSHeapSize / memory.jsHeapSizeLimit;
     
     this.memoryHistory.push({
@@ -184,20 +222,24 @@ export class PerformanceMonitor {
     
     // Severe performance issues
     if (currentFps < this.thresholds.lowFps || memoryPressure) {
-      this.qualitySettings.drawDistance = 500;
-      this.qualitySettings.shadowQuality = 'low';
-      this.qualitySettings.textureQuality = 'low';
-      this.qualitySettings.effectsLevel = 'low';
-      this.qualitySettings.antialiasing = false;
+      this.qualitySettings = {
+        drawDistance: 500,
+        shadowQuality: 'low',
+        textureQuality: 'low',
+        effectsLevel: 'low',
+        antialiasing: false
+      };
       console.warn('Performance: Adjusting to low quality settings');
     }
     // Moderate performance issues
     else if (currentFps < this.thresholds.mediumFps) {
-      this.qualitySettings.drawDistance = 750;
-      this.qualitySettings.shadowQuality = 'medium';
-      this.qualitySettings.textureQuality = 'medium';
-      this.qualitySettings.effectsLevel = 'medium';
-      this.qualitySettings.antialiasing = false;
+      this.qualitySettings = {
+        drawDistance: 750,
+        shadowQuality: 'medium',
+        textureQuality: 'medium',
+        effectsLevel: 'medium',
+        antialiasing: false
+      };
       console.warn('Performance: Adjusting to medium quality settings');
     }
   }
@@ -205,48 +247,50 @@ export class PerformanceMonitor {
   /**
    * Gets a summary of performance metrics
    */
-  public getPerformanceReport(): Record<string, any> {
-    // Calculate average FPS over the last 10 updates
-    const recentFps = this.fpsHistory.slice(-10);
-    const avgFps = recentFps.reduce((sum, fps) => sum + fps, 0) / recentFps.filter(fps => fps > 0).length;
+  public getPerformanceReport(): PerformanceReport {
+    // Calculate FPS stats
+    const currentFps = this.fpsHistory[this.fpsHistory.length - 1] || 0;
+    const averageFps = this.calculateAverage(this.fpsHistory);
+    const minFps = Math.min(...this.fpsHistory.filter(fps => fps > 0));
+    const maxFps = Math.max(...this.fpsHistory);
     
-    // Calculate averages of other metrics
-    const avgRenderTime = this.calculateAverage(this.renderTimes);
-    const avgLogicTime = this.calculateAverage(this.logicTimes);
-    const avgNetworkTime = this.calculateAverage(this.networkTimes);
+    // Calculate timing averages
+    const averageRenderTime = this.calculateAverage(this.renderTimes);
+    const averageLogicTime = this.calculateAverage(this.logicTimes);
+    const averageNetworkTime = this.calculateAverage(this.networkTimes);
     
-    // Calculate average ping
-    const avgPing = this.calculateAverage(this.pingHistory.map(p => p.ping));
+    // Calculate network stats
+    const averagePing = this.calculateAverage(this.pingHistory.map(p => p.ping));
+    const packetLoss = this.calculatePacketLoss();
     
-    // Memory info if available
-    let memoryInfo = null;
-    if (this.memoryHistory.length > 0) {
-      const latest = this.memoryHistory[this.memoryHistory.length - 1];
-      memoryInfo = {
-        used: latest.used,
+    const report: PerformanceReport = {
+      fps: {
+        current: currentFps,
+        average: averageFps,
+        min: minFps,
+        max: maxFps
+      },
+      network: {
+        ping: averagePing,
+        packetLoss
+      },
+      timings: {
+        render: averageRenderTime,
+        logic: averageLogicTime,
+        network: averageNetworkTime
+      }
+    };
+    
+    // Add memory stats if supported
+    if (this.isPerformanceApiSupported && this.memoryHistory.length > 0) {
+      const latestMemory = this.memoryHistory[this.memoryHistory.length - 1].used;
+      report.memory = {
+        used: latestMemory,
         trend: this.calculateMemoryTrend()
       };
     }
     
-    return {
-      fps: {
-        current: recentFps[recentFps.length - 1],
-        average: avgFps,
-        min: Math.min(...recentFps.filter(fps => fps > 0)),
-        max: Math.max(...recentFps)
-      },
-      timing: {
-        render: avgRenderTime,
-        logic: avgLogicTime,
-        network: avgNetworkTime
-      },
-      network: {
-        ping: avgPing,
-        packetLoss: this.calculatePacketLoss()
-      },
-      memory: memoryInfo,
-      qualitySettings: this.qualitySettings
-    };
+    return report;
   }
   
   /**
@@ -284,14 +328,14 @@ export class PerformanceMonitor {
   /**
    * Gets the current quality settings
    */
-  public getQualitySettings(): any {
+  public getQualitySettings(): QualitySettings {
     return { ...this.qualitySettings };
   }
   
   /**
    * Sets quality settings manually
    */
-  public setQualitySettings(settings: Partial<typeof this.qualitySettings>): void {
+  public setQualitySettings(settings: Partial<QualitySettings>): void {
     this.qualitySettings = { ...this.qualitySettings, ...settings };
   }
 } 
