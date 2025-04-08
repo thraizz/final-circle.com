@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { ShotInfo, Weapon, WeaponState, WeaponStats, WeaponType } from '../types/weapons';
+import { SoundManager } from './SoundManager';
 
 export class WeaponSystem {
   private currentWeapon: Weapon | null;
   private weaponState: WeaponState;
   private camera: THREE.PerspectiveCamera;
   private onShoot: (shot: ShotInfo) => void;
+  private soundManager: SoundManager;
 
   // Reusable vectors for performance
   private static readonly FORWARD = new THREE.Vector3(0, 0, -1);
@@ -110,6 +112,7 @@ export class WeaponSystem {
       isAiming: false,
       currentAccuracy: 1.0,
     };
+    this.soundManager = SoundManager.getInstance();
     
     // Create particle pool - pre-allocate objects
     for (let i = 0; i < 3; i++) {
@@ -228,6 +231,9 @@ export class WeaponSystem {
       this.currentWeapon.stats.reloadTime * 1000
     );
     
+    // Play reload sound
+    this.soundManager.playSound(`${this.currentWeapon.type.toLowerCase()}_reload`);
+    
     // Add start reload camera jerk effect
     this.applyCameraJerkEffect(0.02, 0.01);
     
@@ -275,6 +281,9 @@ export class WeaponSystem {
     if (timeSinceLastShot < 1 / this.currentWeapon.stats.fireRate) {
       return false;
     }
+
+    // Play weapon sound
+    this.soundManager.playSound(`${this.currentWeapon.type.toLowerCase()}_shot`);
 
     // Apply recoil using reusable vector
     const recoilIndex = Math.min(

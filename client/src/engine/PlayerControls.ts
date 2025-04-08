@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Vector3 } from 'three';
 import { PlayerAction } from '../types/game';
 import { ShotInfo } from '../types/weapons';
+import { SoundManager } from './SoundManager';
 import { WeaponSystem } from './WeaponSystem';
 
 // Define the collision info interface
@@ -15,6 +16,8 @@ interface CollisionInfo {
 export class PlayerControls {
   private moveSpeed: number = 6;
   private sprintSpeed: number = 12;
+  private superSpeed: number = 30; // Super speed value
+  private isSuperSpeed: boolean = false; // Super speed state
   private jumpForce: number = 6.5;
   private isJumping: boolean = false;
   private isSprinting: boolean = false;
@@ -34,6 +37,10 @@ export class PlayerControls {
   private isMoving: boolean = false;
   private lastPosition: THREE.Vector3 = new THREE.Vector3();
   private controlsEnabled: boolean = false;
+  private soundManager: SoundManager;
+  private lastStepTime: number = 0;
+  private stepInterval: number = 0.3; // Time between step sounds in seconds
+  private wasInAir: boolean = false;
   
   // Lean properties
   private isLeaningLeft: boolean = false;
@@ -71,6 +78,11 @@ export class PlayerControls {
   private acceleration: number = 20.0; // How quickly player reaches target speed
   private friction: number = 10.0; // How quickly player slows down when not pressing movement keys
 
+  // Add new member variables for super speed
+  private shiftPressCount: number = 0; // Counter for shift presses
+  private lastShiftPressTime: number = 0; // Time of last shift press
+  private shiftPressTimeout: number = 1000; // Time window for shift presses (1 second)
+
   constructor(
     camera: THREE.PerspectiveCamera,
     player: THREE.Object3D,
@@ -83,6 +95,7 @@ export class PlayerControls {
     this.obstacles = obstacles;
     this.weaponSystem = new WeaponSystem(camera, this.handleShot.bind(this));
     this.lastPosition.copy(player.position);
+    this.soundManager = SoundManager.getInstance();
 
     // Bind event handlers once
     this.boundKeyDown = this.onKeyDown.bind(this);
@@ -152,6 +165,8 @@ export class PlayerControls {
   private onKeyDown(event: KeyboardEvent): void {
     if (!this.pointerLocked || !this.controlsEnabled) return;
     
+    const currentTime = Date.now();
+    
     switch (event.code) {
       case 'KeyW':
         this.moveForward = true;
@@ -173,6 +188,16 @@ export class PlayerControls {
         break;
       case 'ShiftLeft':
       case 'ShiftRight':
+        if (currentTime - this.lastShiftPressTime > this.shiftPressTimeout) {
+          this.shiftPressCount = 0;
+        }
+        this.shiftPressCount++;
+        this.lastShiftPressTime = currentTime;
+        
+        if (this.shiftPressCount >= 3) {
+          this.isSuperSpeed = !this.isSuperSpeed;
+          this.shiftPressCount = 0;
+        }
         this.isSprinting = true;
         break;
       case 'Space':
@@ -380,8 +405,13 @@ export class PlayerControls {
       this.weaponSystem.setMoving(this.isMoving);
     }
     
-    // Apply movement to velocity with inertia - use sprint speed if sprinting
-    const currentSpeed = this.isSprinting ? this.sprintSpeed : this.moveSpeed;
+    // Apply movement to velocity with inertia - use appropriate speed based on state
+    let currentSpeed = this.moveSpeed;
+    if (this.isSuperSpeed) {
+      currentSpeed = this.superSpeed;
+    } else if (this.isSprinting) {
+      currentSpeed = this.sprintSpeed;
+    }
     
     // Calculate target velocity based on input
     const targetVelocityX = PlayerControls.moveDirection.x * currentSpeed;
@@ -407,6 +437,7 @@ export class PlayerControls {
     if (this.isJumping && this.canJump) {
       this.velocity.y = this.jumpForce;
       this.canJump = false;
+      this.wasInAir = true;
     }
     
     // Apply higher gravity for faster, more realistic falling
@@ -429,6 +460,21 @@ export class PlayerControls {
         this.player.position.y = 0.1; // Slightly above ground level
         this.velocity.y = 0;
         this.canJump = true;
+        
+        // Play impact sound when landing from a jump
+        if (this.wasInAir) {
+          this.soundManager.playSound('impact', 0.5);
+          this.wasInAir = false;
+        }
+        
+        // Play step sound when moving on ground
+        if (this.isMoving) {
+          const currentTime = performance.now() / 1000;
+          if (currentTime - this.lastStepTime >= this.stepInterval) {
+            this.soundManager.playSound('step', 0.3);
+            this.lastStepTime = currentTime;
+          }
+        }
       }
       
       // Update camera position to match player position

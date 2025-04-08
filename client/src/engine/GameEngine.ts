@@ -4,6 +4,7 @@ import { ErrorMessage, GameState, PlayerAction } from '../types/game';
 import { GameMap } from './GameMap';
 import { HUD, HUDConfig } from './HUD';
 import { PlayerControls } from './PlayerControls';
+import { SoundManager } from './SoundManager';
 import { SpectatorControls } from './SpectatorControls';
 
 export class GameEngine {
@@ -12,7 +13,6 @@ export class GameEngine {
   private renderer: THREE.WebGLRenderer;
   private socket!: WebSocket;
   private gameState: GameState;
-  private previousGameState: GameState | null = null;
   private lastFrameTime: number;
   private isRunning: boolean;
   private playerId: string | null;
@@ -90,6 +90,28 @@ export class GameEngine {
     );
     this.camera.position.set(0, 2, 5);
     this.camera.lookAt(0, 0, 0);
+    
+    // Initialize sound manager
+    const soundManager = SoundManager.getInstance();
+    soundManager.initialize(this.camera);
+
+    // Load all sounds
+    Promise.all([
+      soundManager.loadSound('rifle_shot', '/assets/sounds/rifle_shot.wav'),
+      soundManager.loadSound('smg_shot', '/assets/sounds/smg_shot.wav'),
+      soundManager.loadSound('pistol_shot', '/assets/sounds/pistol_shot.wav'),
+      soundManager.loadSound('sniper_shot', '/assets/sounds/sniper_shot.wav'),
+      soundManager.loadSound('rifle_reload', '/assets/sounds/rifle_reload.wav'),
+      soundManager.loadSound('smg_reload', '/assets/sounds/smg_reload.wav'),
+      soundManager.loadSound('pistol_reload', '/assets/sounds/pistol_reload.wav'),
+      soundManager.loadSound('sniper_reload', '/assets/sounds/sniper_reload.wav'),
+      soundManager.loadSound('player_death', '/assets/sounds/player_death.wav'),
+      soundManager.loadSound('player_kill', '/assets/sounds/player_kill.wav'),
+      soundManager.loadSound('step', '/assets/sounds/step_sound.wav'),
+      soundManager.loadSound('impact', '/assets/sounds/impact_sound.wav'),
+    ]).catch(error => {
+      console.error('Error loading sounds:', error);
+    });
     
     // Renderer setup with optimizations
     this.renderer = new THREE.WebGLRenderer({ 
