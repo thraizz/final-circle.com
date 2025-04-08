@@ -21,7 +21,7 @@ export class WeaponSystem {
       damage: 25,
       fireRate: 8,
       magazineSize: 30,
-      reloadTime: 2.5,
+      reloadTime: 1.8,
       accuracy: 0.8,
       movementAccuracyPenalty: 0.2,
       recoilPattern: [
@@ -39,7 +39,7 @@ export class WeaponSystem {
       damage: 15,
       fireRate: 12,
       magazineSize: 25,
-      reloadTime: 1.8,
+      reloadTime: 1.2,
       accuracy: 0.7,
       movementAccuracyPenalty: 0.1,
       recoilPattern: [
@@ -56,7 +56,7 @@ export class WeaponSystem {
       damage: 20,
       fireRate: 5,
       magazineSize: 12,
-      reloadTime: 1.5,
+      reloadTime: 1.0,
       accuracy: 0.85,
       movementAccuracyPenalty: 0.1,
       recoilPattern: [
@@ -71,7 +71,7 @@ export class WeaponSystem {
       damage: 100,
       fireRate: 1,
       magazineSize: 5,
-      reloadTime: 3,
+      reloadTime: 2.0,
       accuracy: 0.95,
       movementAccuracyPenalty: 0.4,
       recoilPattern: [
