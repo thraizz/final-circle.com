@@ -30,6 +30,16 @@ export class GameEngine {
   public socketReconnecting: boolean = false;
   private pingInterval: number | null = null;
   private previousKills: number = 0;
+  
+  // Performance optimizations
+  private playerGeometry: THREE.BoxGeometry;
+  private playerMaterial: THREE.MeshLambertMaterial;
+  private boundHandleResize: () => void;
+  private boundHandleKeyDown: (event: KeyboardEvent) => void;
+  private lastObstacleUpdate: number = 0;
+  private obstacleUpdateInterval: number = 1000; // Update obstacles every 1 second
+  private playerPositions: Map<string, { x: number, y: number, z: number }> = new Map();
+  private playerRotations: Map<string, { x: number, y: number, z: number }> = new Map();
 
   constructor(hudConfig?: Partial<HUDConfig>, playerName: string = 'Player') {
     // Store player name
@@ -142,6 +152,16 @@ export class GameEngine {
     this.isRunning = false;
     this.playerId = null;
 
+    // Performance optimizations - create shared geometry and material
+    this.playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+    this.playerMaterial = new THREE.MeshLambertMaterial({
+      color: 0xff0000 // Default color, will be changed per player
+    });
+    
+    // Bind event handlers once
+    this.boundHandleResize = this.handleResize.bind(this);
+    this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+    
     // Event listeners
     this.setupEventListeners();
   }
@@ -372,6 +392,19 @@ export class GameEngine {
         playerObject = this.createPlayerObject(id === this.playerId);
         this.players.set(id, playerObject);
         this.scene.add(playerObject);
+        
+        // Initialize position tracking
+        this.playerPositions.set(id, {
+          x: playerData.position.x,
+          y: playerData.position.y,
+          z: playerData.position.z
+        });
+        
+        this.playerRotations.set(id, {
+          x: playerData.rotation.x,
+          y: playerData.rotation.y,
+          z: playerData.rotation.z
+        });
       } else {
         playerObject = this.players.get(id)!;
         playerObject.visible = true;
@@ -382,18 +415,51 @@ export class GameEngine {
         continue;
       }
       
-      // Update player position and rotation
-      playerObject.position.set(
-        playerData.position.x,
-        playerData.position.y,
-        playerData.position.z
-      );
+      // Check if position has changed before updating
+      const currentPos = this.playerPositions.get(id);
+      const newPos = {
+        x: playerData.position.x,
+        y: playerData.position.y,
+        z: playerData.position.z
+      };
       
-      playerObject.rotation.set(
-        playerData.rotation.x,
-        playerData.rotation.y,
-        playerData.rotation.z
-      );
+      if (!currentPos || 
+          currentPos.x !== newPos.x || 
+          currentPos.y !== newPos.y || 
+          currentPos.z !== newPos.z) {
+        // Position has changed, update it
+        playerObject.position.set(
+          newPos.x,
+          newPos.y,
+          newPos.z
+        );
+        
+        // Update stored position
+        this.playerPositions.set(id, newPos);
+      }
+      
+      // Check if rotation has changed before updating
+      const currentRot = this.playerRotations.get(id);
+      const newRot = {
+        x: playerData.rotation.x,
+        y: playerData.rotation.y,
+        z: playerData.rotation.z
+      };
+      
+      if (!currentRot || 
+          currentRot.x !== newRot.x || 
+          currentRot.y !== newRot.y || 
+          currentRot.z !== newRot.z) {
+        // Rotation has changed, update it
+        playerObject.rotation.set(
+          newRot.x,
+          newRot.y,
+          newRot.z
+        );
+        
+        // Update stored rotation
+        this.playerRotations.set(id, newRot);
+      }
     }
     
     // Remove players that are no longer in the game state
@@ -401,31 +467,35 @@ export class GameEngine {
       if (!this.gameState.players[id]) {
         this.scene.remove(obj);
         this.players.delete(id);
+        this.playerPositions.delete(id);
+        this.playerRotations.delete(id);
       }
     }
     
     // Update HUD with game information
     this.hud.updateGameInfo(this.gameState, this.playerId);
 
-    // Ensure player controls always has the latest obstacles
-    if (this.playerControls) {
-      const obstacles = this.gameMap.getObstacles();
-      if (obstacles && obstacles.length > 0) {
-        this.playerControls.updateObstacles(obstacles);
+    // Update obstacles only periodically or when game state changes significantly
+    const currentTime = performance.now();
+    if (currentTime - this.lastObstacleUpdate > this.obstacleUpdateInterval) {
+      if (this.playerControls) {
+        const obstacles = this.gameMap.getObstacles();
+        if (obstacles && obstacles.length > 0) {
+          this.playerControls.updateObstacles(obstacles);
+        }
       }
+      this.lastObstacleUpdate = currentTime;
     }
   }
 
   private createPlayerObject(isMainPlayer: boolean): THREE.Object3D {
     const playerGroup = new THREE.Group();
     
-    // Create player mesh
-    const geometry = new THREE.BoxGeometry(1, 2, 1);
-    const material = new THREE.MeshLambertMaterial({
-      color: isMainPlayer ? 0x00ff00 : 0xff0000
-    });
+    // Create player mesh using shared geometry and material
+    const playerMaterial = this.playerMaterial.clone();
+    playerMaterial.color.setHex(isMainPlayer ? 0x00ff00 : 0xff0000);
     
-    const playerMesh = new THREE.Mesh(geometry, material);
+    const playerMesh = new THREE.Mesh(this.playerGeometry, playerMaterial);
     playerMesh.castShadow = true;
     playerMesh.receiveShadow = true;
     playerGroup.add(playerMesh);
@@ -517,8 +587,8 @@ export class GameEngine {
     }
     this.stop();
     this.disconnect();
-    window.removeEventListener('resize', this.handleResize.bind(this));
-    window.removeEventListener('keydown', this.handleKeyDown.bind(this));
+    window.removeEventListener('resize', this.boundHandleResize);
+    window.removeEventListener('keydown', this.boundHandleKeyDown);
   }
 
   public getRenderer(): THREE.WebGLRenderer {
@@ -574,13 +644,9 @@ export class GameEngine {
 
   // Add keyboard shortcut for toggling spectator mode
   private setupEventListeners(): void {
-    window.addEventListener('resize', this.handleResize.bind(this));
+    window.addEventListener('resize', this.boundHandleResize);
     // Add key listener for spectator mode toggle
-    window.addEventListener('keydown', (event: KeyboardEvent) => {
-      if (event.code === 'KeyV') {
-        this.toggleSpectatorMode();
-      }
-    });
+    window.addEventListener('keydown', this.boundHandleKeyDown);
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
