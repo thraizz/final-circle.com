@@ -25,6 +25,7 @@ export class HUD {
   private errorMessageDisplay: HTMLDivElement;
   private deathOverlay: HTMLDivElement;
   private lowHealthOverlay: HTMLDivElement;
+  private killIndicator: HTMLDivElement;
   private config: HUDConfig;
   private frames: number[];
   private lastFrameTime: number;
@@ -90,6 +91,12 @@ export class HUD {
     this.lowHealthOverlay.className = 'low-health-overlay';
     this.lowHealthOverlay.style.display = 'none';
     document.body.appendChild(this.lowHealthOverlay);
+    
+    // Create kill indicator
+    this.killIndicator = document.createElement('div');
+    this.killIndicator.className = 'kill-indicator';
+    this.killIndicator.style.display = 'none';
+    document.body.appendChild(this.killIndicator);
     
     // Lobby overlay setup
     this.lobbyOverlay = document.createElement('div');
@@ -356,6 +363,22 @@ export class HUD {
         box-sizing: border-box;
       }
       
+      .kill-indicator {
+        position: fixed;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(255, 0, 0, 0.8);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 24px;
+        font-weight: bold;
+        text-align: center;
+        z-index: 1000;
+        animation: fadeInOut 2s ease-in-out;
+      }
+      
       @keyframes pulse {
         0% {
           opacity: 0.8;
@@ -369,6 +392,13 @@ export class HUD {
           opacity: 0.8;
           transform: scale(1);
         }
+      }
+      
+      @keyframes fadeInOut {
+        0% { opacity: 0; transform: translate(-50%, -20px); }
+        10% { opacity: 1; transform: translate(-50%, 0); }
+        90% { opacity: 1; transform: translate(-50%, 0); }
+        100% { opacity: 0; transform: translate(-50%, -20px); }
       }
     `;
     document.head.appendChild(style);
@@ -714,6 +744,16 @@ export class HUD {
     this.lobbyOverlay.style.display = show ? 'block' : 'none';
   }
   
+  public showKillIndicator(killedPlayerName: string): void {
+    this.killIndicator.textContent = `Killed ${killedPlayerName}`;
+    this.killIndicator.style.display = 'block';
+    
+    // Fade out after 2 seconds
+    setTimeout(() => {
+      this.killIndicator.style.display = 'none';
+    }, 2000);
+  }
+  
   public cleanup(): void {
     // Cancel animations
     if (this.lowHealthAnimationId !== null) {
@@ -739,6 +779,10 @@ export class HUD {
     
     if (this.lowHealthOverlay && this.lowHealthOverlay.parentNode) {
       this.lowHealthOverlay.parentNode.removeChild(this.lowHealthOverlay);
+    }
+    
+    if (this.killIndicator && this.killIndicator.parentNode) {
+      this.killIndicator.parentNode.removeChild(this.killIndicator);
     }
     
     // Clear any pending timeouts

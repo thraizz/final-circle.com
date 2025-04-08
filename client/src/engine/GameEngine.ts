@@ -12,6 +12,7 @@ export class GameEngine {
   private renderer: THREE.WebGLRenderer;
   private socket!: WebSocket;
   private gameState: GameState;
+  private previousGameState: GameState | null = null;
   private lastFrameTime: number;
   private isRunning: boolean;
   private playerId: string | null;
@@ -28,6 +29,7 @@ export class GameEngine {
   private connectionReady: boolean = false;
   public socketReconnecting: boolean = false;
   private pingInterval: number | null = null;
+  private previousKills: number = 0;
 
   constructor(hudConfig?: Partial<HUDConfig>, playerName: string = 'Player') {
     // Store player name
@@ -337,6 +339,21 @@ export class GameEngine {
   }
 
   private updateGameState(): void {
+    // Check for kills first - only if we have a player ID
+    if (this.playerId && this.gameState.players[this.playerId]) {
+      const currentKills = this.gameState.players[this.playerId].kills;
+      if (currentKills > this.previousKills) {
+        // Find who was killed by checking which player just died
+        for (const [id, player] of Object.entries(this.gameState.players)) {
+          if (id !== this.playerId && !player.isAlive) {
+            this.hud.showKillIndicator(player.displayName || id.substring(0, 8));
+            break;
+          }
+        }
+        this.previousKills = currentKills;
+      }
+    }
+
     // Update player models
     for (const [id, playerData] of Object.entries(this.gameState.players)) {
       if (!playerData.isAlive) {
@@ -391,7 +408,6 @@ export class GameEngine {
     this.hud.updateGameInfo(this.gameState, this.playerId);
 
     // Ensure player controls always has the latest obstacles
-    // This is important if obstacles are added or removed dynamically
     if (this.playerControls) {
       const obstacles = this.gameMap.getObstacles();
       if (obstacles && obstacles.length > 0) {
