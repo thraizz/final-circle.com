@@ -235,6 +235,30 @@ export class GameEngine {
       case 'gameState':
         gameStatePayload = data.payload as GameState;
         this.gameState = gameStatePayload;
+        
+        // Synchronize player position with server-side position on initial spawn
+        if (this.playerId && this.gameState.players[this.playerId]) {
+          const serverPlayerData = this.gameState.players[this.playerId];
+          const isPlayerAtOrigin = this.player.position.x === 0 && 
+                                  this.player.position.z === 0;
+          
+          // If player is at origin position, update to match server position
+          if (isPlayerAtOrigin && serverPlayerData.isAlive) {
+            console.log('Updating player position from server:', serverPlayerData.position);
+            this.player.position.set(
+              serverPlayerData.position.x,
+              serverPlayerData.position.y,
+              serverPlayerData.position.z
+            );
+            
+            // Update camera position as well
+            this.camera.position.set(
+              serverPlayerData.position.x,
+              serverPlayerData.position.y + 1.6, // Eye level
+              serverPlayerData.position.z
+            );
+          }
+        }
         break;
         
       case 'error':
@@ -479,11 +503,24 @@ export class GameEngine {
         this.spectatorControls = null;
       }
       
-      // Reset player camera
+      // Get the current server position for our player
+      const playerPos = new THREE.Vector3(0, 0, 0);
+      if (this.playerId && this.gameState.players[this.playerId]) {
+        const serverPlayerData = this.gameState.players[this.playerId];
+        playerPos.set(
+          serverPlayerData.position.x,
+          serverPlayerData.position.y,
+          serverPlayerData.position.z
+        );
+        // Update our local player object to match server position
+        this.player.position.copy(playerPos);
+      }
+      
+      // Reset player camera to use server position
       this.camera.position.set(
-        this.player.position.x,
-        this.player.position.y + 1.6,
-        this.player.position.z
+        playerPos.x,
+        playerPos.y + 1.6,
+        playerPos.z
       );
       this.camera.rotation.set(0, 0, 0);
       this.playerControls = new PlayerControls(

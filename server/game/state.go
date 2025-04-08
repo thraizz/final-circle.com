@@ -2,6 +2,7 @@ package game
 
 import (
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -179,7 +180,9 @@ func (sm *StateManager) AddPlayer(id string) error {
 		Deaths:      0,
 	}
 
-	logger.DebugLogger.Printf("Player added: %s at position (%.2f, %.2f, %.2f)", id, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+	logger.InfoLogger.Printf("Player added: %s at position (%.2f, %.2f, %.2f), distance from center: %.2f",
+		id, spawnPoint.X, spawnPoint.Y, spawnPoint.Z,
+		math.Sqrt(spawnPoint.X*spawnPoint.X+spawnPoint.Z*spawnPoint.Z))
 	return nil
 }
 
@@ -225,12 +228,8 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 	switch action.Type {
 	case "move":
 		if action.Data.Position != nil {
-			oldPos := player.Position
 			player.Position = *action.Data.Position
-			logger.DebugLogger.Printf("Player %s moved: (%.2f, %.2f, %.2f) -> (%.2f, %.2f, %.2f)",
-				id,
-				oldPos.X, oldPos.Y, oldPos.Z,
-				player.Position.X, player.Position.Y, player.Position.Z)
+
 		}
 		if action.Data.Rotation != nil {
 			player.Rotation = *action.Data.Rotation
@@ -392,8 +391,9 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 					p.IsAlive = true
 					p.Health = 100
 					p.Position = spawnPoint
-					logger.DebugLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
-						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+					logger.InfoLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f), distance from center: %.2f",
+						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z,
+						math.Sqrt(spawnPoint.X*spawnPoint.X+spawnPoint.Z*spawnPoint.Z))
 				} else {
 					logger.InfoLogger.Printf("Player %s disconnected while waiting to respawn", playerId)
 				}
@@ -533,8 +533,9 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 					p.IsAlive = true
 					p.Health = 100
 					p.Position = spawnPoint
-					logger.DebugLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f)",
-						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+					logger.InfoLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f), distance from center: %.2f",
+						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z,
+						math.Sqrt(spawnPoint.X*spawnPoint.X+spawnPoint.Z*spawnPoint.Z))
 				} else {
 					logger.InfoLogger.Printf("Player %s disconnected while waiting to respawn", playerId)
 				}
@@ -577,11 +578,19 @@ func (sm *StateManager) EndGame() {
 
 // getRandomSpawnPoint returns a random spawn point
 func (sm *StateManager) getRandomSpawnPoint() types.Vector3 {
-	// This is a placeholder. In a real implementation, you would:
-	// 1. Check which spawn points are available
-	// 2. Ensure players don't spawn too close to each other
-	// 3. Consider the game map layout
-	return sm.spawnPoints[0]
+	// If there are no spawn points defined, create one randomly within the circle
+	if len(sm.spawnPoints) == 0 {
+		return generateRandomPointInCircle(0, 0, 800.0) // Fallback with default circle radius
+	}
+
+	// Create a properly seeded random source
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+
+	// Pick a random spawn point from the available ones
+	randomIndex := r.Intn(len(sm.spawnPoints))
+
+	return sm.spawnPoints[randomIndex]
 }
 
 // generateMatchID generates a unique match ID
@@ -589,16 +598,50 @@ func generateMatchID() string {
 	return time.Now().Format("20060102150405")
 }
 
-// generateSpawnPoints generates initial spawn points
+// generateSpawnPoints generates initial spawn points within the play area circle
 func generateSpawnPoints() []types.Vector3 {
-	// This is a placeholder. In a real implementation, you would:
-	// 1. Load spawn points from a map configuration
-	// 2. Ensure proper spacing between spawn points
-	// 3. Consider the game map layout
-	return []types.Vector3{
-		{X: 0, Y: 0, Z: 0},
-		{X: 10, Y: 0, Z: 10},
-		{X: -10, Y: 0, Z: -10},
+	// Center of the circle
+	centerX := 0.0
+	centerY := 0.0
+
+	// Radius of the spawn area circle - matches the ringWallRadius in GameMap.ts
+	circleRadius := 800.0
+
+	// Number of spawn points to generate
+	spawnPointCount := 20
+
+	spawnPoints := make([]types.Vector3, spawnPointCount)
+
+	// Create spawn points randomly distributed within the circle
+	for i := 0; i < spawnPointCount; i++ {
+		spawnPoints[i] = generateRandomPointInCircle(centerX, centerY, circleRadius)
+	}
+
+	return spawnPoints
+}
+
+// generateRandomPointInCircle creates a random position within a circle
+func generateRandomPointInCircle(centerX, centerY, radius float64) types.Vector3 {
+	// Create a properly seeded random source
+	source := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(source)
+
+	// Generate random angle
+	angle := r.Float64() * 2 * math.Pi
+
+	// Generate random radius (use square root for uniform distribution)
+	// Random value between 0.3 and 0.95 of the circle radius to avoid edge spawns
+	radiusFactor := 0.3 + (r.Float64() * 0.65)
+	distance := radius * radiusFactor
+
+	// Calculate position
+	x := centerX + math.Cos(angle)*distance
+	z := centerY + math.Sin(angle)*distance
+
+	return types.Vector3{
+		X: x,
+		Y: 0.0, // Spawn at ground level
+		Z: z,
 	}
 }
 
