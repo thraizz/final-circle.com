@@ -261,8 +261,56 @@ export class GameMap {
       nexusGroup.add(container);
     });
 
+    // Add light beam indicator over the central hub
+    this.addNexusLightBeam(nexusGroup);
+
     // Add the entire Nexus to the scene
     this.scene.add(nexusGroup);
+  }
+
+  private addNexusLightBeam(nexusGroup: THREE.Group): void {
+    // Create a light beam material
+    const beamMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3080ff,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide
+    });
+
+    // Create a cone geometry for the light beam
+    const beamHeight = 200; // Height of the light beam
+    const beamTopRadius = 15; // Radius at the top of the beam
+    const beamBottomRadius = 8; // Radius at the bottom of the beam (matches nexus width)
+    const beamGeometry = new THREE.CylinderGeometry(beamTopRadius, beamBottomRadius, beamHeight, 16);
+    
+    // Create the beam mesh
+    const beam = new THREE.Mesh(beamGeometry, beamMaterial);
+    beam.position.y = 20; // Position at the top of the nexus structure
+    nexusGroup.add(beam);
+
+    // Add a point light at the top of the beam for dynamic lighting effect
+    const beamLight = new THREE.PointLight(0x3080ff, 2, 300);
+    beamLight.position.y = beamHeight + 20;
+    nexusGroup.add(beamLight);
+    this.lights.push(beamLight);
+
+    // Add a spotlight at the top of the beam for focused lighting
+    const spotLight = new THREE.SpotLight(0x3080ff, 3, 400, Math.PI / 6, 0.5, 1);
+    spotLight.position.y = beamHeight + 20;
+    spotLight.target.position.y = 0;
+    nexusGroup.add(spotLight);
+    nexusGroup.add(spotLight.target);
+    this.lights.push(spotLight);
+
+    // Add a pulsing animation to the beam
+    const animateBeam = () => {
+      const time = Date.now() * 0.001;
+      beam.material.opacity = 0.4 + Math.sin(time * 2) * 0.2; // Pulsing opacity
+      beamLight.intensity = 1.5 + Math.sin(time * 2) * 0.5; // Pulsing light intensity
+      spotLight.intensity = 2 + Math.sin(time * 2) * 0.5; // Pulsing spotlight intensity
+      requestAnimationFrame(animateBeam);
+    };
+    animateBeam();
   }
 
   private createSpawnArea(): void {
