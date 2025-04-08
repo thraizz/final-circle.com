@@ -109,6 +109,7 @@ export class GameEngine {
       soundManager.loadSound('player_kill', '/assets/sounds/player_kill.wav'),
       soundManager.loadSound('step', '/assets/sounds/step_sound.wav'),
       soundManager.loadSound('impact', '/assets/sounds/impact_sound.wav'),
+      soundManager.loadSound('melee_shot', '/assets/sounds/melee_shot.wav'),
     ]).catch(error => {
       console.error('Error loading sounds:', error);
     });

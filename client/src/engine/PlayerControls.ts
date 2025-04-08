@@ -39,7 +39,7 @@ export class PlayerControls {
   private controlsEnabled: boolean = false;
   private soundManager: SoundManager;
   private lastStepTime: number = 0;
-  private stepInterval: number = 0.3; // Time between step sounds in seconds
+  private stepInterval: number = 0.4; // Time between step sounds in seconds
   private wasInAir: boolean = false;
   
   // Lean properties
