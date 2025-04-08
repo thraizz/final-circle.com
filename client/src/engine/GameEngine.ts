@@ -223,6 +223,15 @@ export class GameEngine {
         this.playerId = initPayload.id || null;
         break;
         
+      case 'playerId':
+        initPayload = data.payload as { id: string };
+        this.playerId = initPayload.id || null;
+        if (this.playerId) {
+          console.log('Received player ID:', this.playerId);
+          this.playerControls.enableControls();
+        }
+        break;
+        
       case 'gameState':
         gameStatePayload = data.payload as GameState;
         this.gameState = gameStatePayload;
