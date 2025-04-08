@@ -37,6 +37,21 @@ export class GameEngine {
     // Scene setup
     this.scene = new THREE.Scene();
     
+    // Skybox setup with background color too
+    this.scene.background = new THREE.Color(0x87CEEB); // Set a blue background as fallback
+    
+    // Sky dome using simple geometry
+    const skyGeo = new THREE.SphereGeometry(900, 32, 15);
+    const skyMat = new THREE.MeshBasicMaterial({
+      color: 0x87CEEB, // Sky blue color
+      side: THREE.BackSide,
+    });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    this.scene.add(sky);
+    
+    // Add fog to create depth
+    this.scene.fog = new THREE.Fog(0xccccff, 500, 900);
+    
     // Lighting setup
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     this.scene.add(ambientLight);
@@ -59,7 +74,7 @@ export class GameEngine {
       75,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000
+      2000 // Increase far clipping plane to see the sky
     );
     this.camera.position.set(0, 2, 5);
     this.camera.lookAt(0, 0, 0);
