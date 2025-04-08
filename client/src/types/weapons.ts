@@ -13,6 +13,8 @@ export interface WeaponStats {
   movementAccuracyPenalty: number; // Accuracy penalty while moving (0-1)
   range: number; // Effective range in units
   bulletSpeed: number; // Units per second
+  zoomLevel: number; // FOV when aiming (lower = more zoom)
+  hasScopeOverlay: boolean; // Whether to show scope overlay when aiming
 }
 
 export interface Weapon {

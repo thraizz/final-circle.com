@@ -19,6 +19,11 @@ export class WeaponSystem {
   private isKnifeStriking: boolean = false;
   private knifeStrikeStartTime: number | null = null;
   private readonly KNIFE_STRIKE_DURATION = 0.3; // seconds
+  private scopeOverlay: THREE.Object3D | null = null;
+  private defaultFOV: number = 90;
+  private currentFOV: number = 90;
+  private targetFOV: number = 90;
+  private readonly ZOOM_TRANSITION_SPEED = 5; // Speed of zoom transition
 
   // Reusable vectors for performance
   private static readonly FORWARD = new THREE.Vector3(0, 0, -1);
@@ -47,6 +52,8 @@ export class WeaponSystem {
       recoilRecoverySpeed: 0.9,
       range: 100,
       bulletSpeed: 400,
+      zoomLevel: 60, // Moderate zoom
+      hasScopeOverlay: false,
     },
     SMG: {
       damage: 15,
@@ -64,6 +71,8 @@ export class WeaponSystem {
       recoilRecoverySpeed: 1.2,
       range: 50,
       bulletSpeed: 350,
+      zoomLevel: 70, // Light zoom
+      hasScopeOverlay: false,
     },
     PISTOL: {
       damage: 20,
@@ -79,6 +88,8 @@ export class WeaponSystem {
       recoilRecoverySpeed: 1.0,
       range: 40,
       bulletSpeed: 300,
+      zoomLevel: 75, // Very light zoom
+      hasScopeOverlay: false,
     },
     SNIPER: {
       damage: 100,
@@ -94,18 +105,22 @@ export class WeaponSystem {
       recoilRecoverySpeed: 0.8,
       range: 200,
       bulletSpeed: 500,
+      zoomLevel: 30, // Heavy zoom
+      hasScopeOverlay: true,
     },
     KNIFE: {
       damage: 50,
       fireRate: 1.5,
-      magazineSize: 1, // Knife doesn't use ammo
+      magazineSize: 1,
       reloadTime: 0.5,
-      accuracy: 1.0, // Perfect accuracy for melee
-      movementAccuracyPenalty: 0, // No movement penalty for melee
+      accuracy: 1.0,
+      movementAccuracyPenalty: 0,
       recoilPattern: [new THREE.Vector3(0.01, 0.02, 0)],
       recoilRecoverySpeed: 1.5,
-      range: 2, // Very short range for melee
-      bulletSpeed: 0, // No bullet speed for melee
+      range: 2,
+      bulletSpeed: 0,
+      zoomLevel: 90, // No zoom
+      hasScopeOverlay: false,
     },
   };
 
@@ -143,6 +158,12 @@ export class WeaponSystem {
     this.soundManager = SoundManager.getInstance();
     this.weaponMesh = null;
     this.magazineMesh = null;
+    this.defaultFOV = camera.fov;
+    this.currentFOV = this.defaultFOV;
+    this.targetFOV = this.defaultFOV;
+
+    // Create scope overlay
+    this.createScopeOverlay();
 
     // Create particle pool - pre-allocate objects
     for (let i = 0; i < 3; i++) {
@@ -153,6 +174,80 @@ export class WeaponSystem {
       particle.visible = false;
       this.particlePool.push(particle);
     }
+  }
+
+  private createScopeOverlay(): void {
+    // Create a more detailed scope overlay for sniper
+    const scopeGroup = new THREE.Group();
+    
+    // Outer ring (black border)
+    const outerRingGeometry = new THREE.RingGeometry(0.35, 0.4, 32);
+    const outerRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
+    scopeGroup.add(outerRing);
+    
+    // Inner ring (lens)
+    const innerRingGeometry = new THREE.RingGeometry(0.36, 0.39, 32);
+    const innerRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0x88ccff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.3,
+    });
+    const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
+    scopeGroup.add(innerRing);
+    
+    // Crosshair
+    const crosshairMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.8,
+    });
+    
+    // Horizontal line
+    const horizontalGeometry = new THREE.PlaneGeometry(0.05, 0.001);
+    const horizontalLine = new THREE.Mesh(horizontalGeometry, crosshairMaterial);
+    scopeGroup.add(horizontalLine);
+    
+    // Vertical line
+    const verticalGeometry = new THREE.PlaneGeometry(0.001, 0.05);
+    const verticalLine = new THREE.Mesh(verticalGeometry, crosshairMaterial);
+    scopeGroup.add(verticalLine);
+    
+    // Distance markers
+    const markerMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.6,
+    });
+    
+    // Add distance markers at 12, 3, 6, and 9 o'clock positions
+    const markerPositions = [
+      { x: 0, y: 0.38, rot: 0 },    // 12 o'clock
+      { x: 0.38, y: 0, rot: Math.PI/2 }, // 3 o'clock
+      { x: 0, y: -0.38, rot: Math.PI },  // 6 o'clock
+      { x: -0.38, y: 0, rot: -Math.PI/2 } // 9 o'clock
+    ];
+    
+    markerPositions.forEach(pos => {
+      const markerGeometry = new THREE.PlaneGeometry(0.02, 0.005);
+      const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+      marker.position.set(pos.x, pos.y, 0);
+      marker.rotation.z = pos.rot;
+      scopeGroup.add(marker);
+    });
+    
+    // Position the scope overlay in front of the camera
+    scopeGroup.position.z = -1;
+    
+    this.scopeOverlay = scopeGroup;
+    this.scopeOverlay.visible = false;
+    this.camera.add(this.scopeOverlay);
   }
 
   public equipWeapon(type: WeaponType, name: string): void {
@@ -775,6 +870,13 @@ export class WeaponSystem {
       this.weaponMesh.rotation.z +=
         (targetRotation.z - this.weaponMesh.rotation.z) * lerpFactor;
     }
+
+    // Update zoom transition
+    if (Math.abs(this.currentFOV - this.targetFOV) > 0.1) {
+      this.currentFOV += (this.targetFOV - this.currentFOV) * this.ZOOM_TRANSITION_SPEED * deltaTime;
+      this.camera.fov = this.currentFOV;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   public setMoving(moving: boolean): void {
@@ -795,6 +897,14 @@ export class WeaponSystem {
           0.1,
           this.currentWeapon.stats.accuracy + aimingBonus - movementPenalty
         );
+
+        // Update zoom level
+        this.targetFOV = isAiming ? this.currentWeapon.stats.zoomLevel : this.defaultFOV;
+
+        // Show/hide scope overlay for sniper
+        if (this.scopeOverlay) {
+          this.scopeOverlay.visible = isAiming && this.currentWeapon.stats.hasScopeOverlay;
+        }
       }
     }
   }
