@@ -8,6 +8,11 @@ export class WeaponSystem {
   private camera: THREE.PerspectiveCamera;
   private onShoot: (shot: ShotInfo) => void;
   private soundManager: SoundManager;
+  private weaponMesh: THREE.Object3D | null;
+  private magazineMesh: THREE.Mesh | null;
+  private isKnifeStriking: boolean = false;
+  private knifeStrikeStartTime: number | null = null;
+  private readonly KNIFE_STRIKE_DURATION = 0.3; // seconds
 
   // Reusable vectors for performance
   private static readonly FORWARD = new THREE.Vector3(0, 0, -1);
@@ -84,12 +89,24 @@ export class WeaponSystem {
       range: 200,
       bulletSpeed: 500,
     },
+    KNIFE: {
+      damage: 50,
+      fireRate: 1.5,
+      magazineSize: 1, // Knife doesn't use ammo
+      reloadTime: 0.5,
+      accuracy: 1.0, // Perfect accuracy for melee
+      movementAccuracyPenalty: 0, // No movement penalty for melee
+      recoilPattern: [
+        new THREE.Vector3(0.01, 0.02, 0),
+      ],
+      recoilRecoverySpeed: 1.5,
+      range: 2, // Very short range for melee
+      bulletSpeed: 0, // No bullet speed for melee
+    },
   };
 
   private reloadTimeout: number | null = null;
   private isMoving: boolean = false;
-  private weaponMesh: THREE.Mesh | null = null;
-  private magazineMesh: THREE.Mesh | null = null;
   private reloadAnimationStartTime: number | null = null;
   private cameraJerkEffect: THREE.Vector3 | null = null;
   private cameraJerkDecay: number = 15; // How fast the jerk effect decays
@@ -113,6 +130,8 @@ export class WeaponSystem {
       currentAccuracy: 1.0,
     };
     this.soundManager = SoundManager.getInstance();
+    this.weaponMesh = null;
+    this.magazineMesh = null;
     
     // Create particle pool - pre-allocate objects
     for (let i = 0; i < 3; i++) {
@@ -166,6 +185,15 @@ export class WeaponSystem {
     let scale: THREE.Vector3;
     let magazineGeometry: THREE.BufferGeometry;
     let magazinePosition: THREE.Vector3;
+    
+    // Variables for knife model
+    let knifeGroup: THREE.Group;
+    let blade: THREE.Mesh;
+    let handle: THREE.Mesh;
+    let bladeGeometry: THREE.BufferGeometry;
+    let bladeMaterial: THREE.Material;
+    let handleGeometry: THREE.BufferGeometry;
+    let handleMaterial: THREE.Material;
 
     switch (type) {
       case 'RIFLE':
@@ -200,6 +228,46 @@ export class WeaponSystem {
         magazineGeometry = new THREE.BoxGeometry(0.1, 0.16, 0.1);
         magazinePosition = new THREE.Vector3(0, -0.1, 0.2);
         break;
+      case 'KNIFE':
+        // Create a knife model with blade and handle
+        knifeGroup = new THREE.Group();
+        
+        // Blade
+        bladeGeometry = new THREE.BoxGeometry(0.02, 0.05, 0.3);  // Swapped width and height
+        bladeMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0xcccccc,
+          metalness: 0.8,
+          roughness: 0.2
+        });
+        blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
+        
+        // Handle
+        handleGeometry = new THREE.BoxGeometry(0.04, 0.04, 0.15);
+        handleMaterial = new THREE.MeshStandardMaterial({ 
+          color: 0x333333,
+          metalness: 0.2,
+          roughness: 0.8
+        });
+        handle = new THREE.Mesh(handleGeometry, handleMaterial);
+        handle.position.z = 0.225; // Position handle in front of blade
+        
+        // Add parts to group
+        knifeGroup.add(blade);
+        knifeGroup.add(handle);
+        
+        // Position the knife in the player's hand
+        knifeGroup.position.set(0.3, -0.2, -0.5);
+        knifeGroup.rotation.set(0, Math.PI * 1.75, 0); // Rotate 315 degrees around Y axis
+        
+        // Set the weapon mesh to the knife group
+        this.weaponMesh = knifeGroup;
+        
+        // No magazine for knife
+        this.magazineMesh = null;
+        
+        // Add to camera to make it follow view
+        this.camera.add(this.weaponMesh);
+        return; // Return early as we've already set up the weapon mesh
     }
 
     this.weaponMesh = new THREE.Mesh(geometry, material);
@@ -219,6 +287,7 @@ export class WeaponSystem {
   public startReload(): boolean {
     if (!this.currentWeapon || 
         this.currentWeapon.isReloading || 
+        this.currentWeapon.type === 'KNIFE' ||
         this.currentWeapon.currentAmmo === this.currentWeapon.stats.magazineSize ||
         this.currentWeapon.totalAmmo <= 0) {
       return false;
@@ -272,7 +341,7 @@ export class WeaponSystem {
   public shoot(): boolean {
     if (!this.currentWeapon || 
         this.currentWeapon.isReloading || 
-        this.currentWeapon.currentAmmo <= 0) {
+        (this.currentWeapon.type !== 'KNIFE' && this.currentWeapon.currentAmmo <= 0)) {
       return false;
     }
 
@@ -280,6 +349,12 @@ export class WeaponSystem {
     const timeSinceLastShot = (now - this.currentWeapon.lastShotTime) / 1000;
     if (timeSinceLastShot < 1 / this.currentWeapon.stats.fireRate) {
       return false;
+    }
+
+    // Start knife strike animation if it's a knife
+    if (this.currentWeapon.type === 'KNIFE') {
+      this.isKnifeStriking = true;
+      this.knifeStrikeStartTime = now;
     }
 
     // Play weapon sound
@@ -340,11 +415,15 @@ export class WeaponSystem {
     };
 
     // Update weapon state
-    this.currentWeapon.currentAmmo--;
+    if (this.currentWeapon.type !== 'KNIFE') {
+      this.currentWeapon.currentAmmo--;
+    }
     this.currentWeapon.lastShotTime = now;
 
-    // Auto-reload when empty
-    if (this.currentWeapon.currentAmmo === 0 && this.currentWeapon.totalAmmo > 0) {
+    // Auto-reload when empty (only for non-knife weapons)
+    if (this.currentWeapon.type !== 'KNIFE' && 
+        this.currentWeapon.currentAmmo === 0 && 
+        this.currentWeapon.totalAmmo > 0) {
       this.startReload();
     }
 
@@ -358,6 +437,44 @@ export class WeaponSystem {
 
   private createMuzzleFlash(): void {
     if (!this.weaponMesh) return;
+
+    if (this.currentWeapon?.type === 'KNIFE') {
+      // Create a diagonal slash effect
+      const slashGeometry = new THREE.PlaneGeometry(0.4, 0.08);
+      const slashMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide
+      });
+      
+      const slashMesh = new THREE.Mesh(slashGeometry, slashMaterial);
+      slashMesh.position.set(0.1, 0.1, -0.8); // Position for diagonal slash
+      slashMesh.rotation.set(0, 0, -Math.PI / 4); // 45-degree diagonal
+      this.weaponMesh.add(slashMesh);
+      
+      // Animate the slash effect
+      let progress = 0;
+      const animateSlash = () => {
+        progress += 0.1;
+        if (progress >= 1) {
+          if (slashMesh.parent) {
+            slashMesh.parent.remove(slashMesh);
+          }
+          return;
+        }
+        
+        // Move the slash diagonally
+        slashMesh.position.x -= 0.02;
+        slashMesh.position.y -= 0.02;
+        slashMaterial.opacity = 0.6 * (1 - progress);
+        
+        requestAnimationFrame(animateSlash);
+      };
+      
+      animateSlash();
+      return;
+    }
 
     // Create muzzle flash light
     const light = new THREE.PointLight(0xffaa00, 5, 2); // Increased intensity
@@ -433,6 +550,48 @@ export class WeaponSystem {
       }
     }
 
+    // Update knife strike animation
+    if (this.isKnifeStriking && this.knifeStrikeStartTime !== null && this.weaponMesh && this.currentWeapon?.type === 'KNIFE') {
+      const elapsedTime = (performance.now() - this.knifeStrikeStartTime) / 1000;
+      const progress = Math.min(elapsedTime / this.KNIFE_STRIKE_DURATION, 1);
+      
+      // Simple diagonal slash from top right to bottom left
+      const slashProgress = progress * Math.PI; // 0 to π
+      
+      // Start from top right, move to bottom left
+      const startX = 0.4;  // Start further right
+      const startY = -0.1; // Start higher
+      const endX = 0.2;    // End more left
+      const endY = -0.3;   // End lower
+      
+      // Linear interpolation for position
+      const currentX = startX + (endX - startX) * progress;
+      const currentY = startY + (endY - startY) * progress;
+      
+      // Apply the strike animation
+      this.weaponMesh.position.set(
+        currentX,
+        currentY,
+        -0.5  // Keep Z position constant
+      );
+      
+      // Rotate blade during slash
+      this.weaponMesh.rotation.set(
+        0,  // Keep X rotation constant
+        Math.PI * 1.75,  // Keep base Y rotation
+        -Math.PI / 4 * progress  // Rotate around Z axis during slash
+      );
+      
+      // End the strike animation
+      if (progress >= 1) {
+        this.isKnifeStriking = false;
+        this.knifeStrikeStartTime = null;
+        // Reset position and rotation
+        this.weaponMesh.position.set(0.3, -0.2, -0.5);
+        this.weaponMesh.rotation.set(0, Math.PI * 1.75, 0);
+      }
+    }
+
     // Update recoil recovery
     if (this.currentWeapon && this.weaponState.currentRecoil.length() > 0) {
       const recovery = this.currentWeapon.stats.recoilRecoverySpeed * deltaTime;
@@ -461,7 +620,7 @@ export class WeaponSystem {
     }
 
     // Update weapon model position when aiming or reloading
-    if (this.weaponMesh) {
+    if (this.weaponMesh && !this.isKnifeStriking) {  // Don't interfere with knife strike animation
       let targetPosition;
       const targetRotation = new THREE.Euler(0, 0, 0);
       
@@ -603,6 +762,8 @@ export class WeaponSystem {
         return new THREE.Vector3(0, -0.1, 0);
       case 'SNIPER':
         return new THREE.Vector3(0, -0.1, 0.2);
+      case 'KNIFE':
+        return new THREE.Vector3(0, 0, 0); // Knife doesn't have a magazine
       default:
         return new THREE.Vector3(0, -0.1, 0);
     }

@@ -572,9 +572,13 @@ export class HUD {
     
     if (weapon) {
       if (this.config.showAmmo) {
-        this.ammoDisplay.textContent = weapon.isReloading 
-          ? 'Reloading...' 
-          : `Ammo: ${weapon.currentAmmo}/${weapon.totalAmmo}`;
+        if (weapon.type === 'KNIFE') {
+          this.ammoDisplay.textContent = 'Melee Weapon';
+        } else {
+          this.ammoDisplay.textContent = weapon.isReloading 
+            ? 'Reloading...' 
+            : `Ammo: ${weapon.currentAmmo}/${weapon.totalAmmo}`;
+        }
       }
       
       if (this.config.showWeaponInfo) {

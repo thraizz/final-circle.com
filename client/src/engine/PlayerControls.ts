@@ -231,6 +231,9 @@ export class PlayerControls {
       case 'Digit4':
         this.weaponSystem.equipWeapon('SNIPER', 'Default Sniper');
         break;
+      case 'Digit5':
+        this.weaponSystem.equipWeapon('KNIFE', 'Combat Knife');
+        break;
     }
   }
 
@@ -367,7 +370,7 @@ export class PlayerControls {
   private onWheel(event: WheelEvent): void {
     if (!this.pointerLocked || !this.controlsEnabled) return;
 
-    const weapons: WeaponType[] = ['RIFLE', 'SMG', 'PISTOL', 'SNIPER'];
+    const weapons: WeaponType[] = ['RIFLE', 'SMG', 'PISTOL', 'SNIPER', 'KNIFE'];
     const currentWeapon = this.weaponSystem.getCurrentWeapon();
     
     if (!currentWeapon) return;

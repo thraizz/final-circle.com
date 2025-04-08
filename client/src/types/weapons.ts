@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 
-export type WeaponType = 'RIFLE' | 'SMG' | 'PISTOL' | 'SNIPER';
+export type WeaponType = 'RIFLE' | 'SMG' | 'PISTOL' | 'SNIPER' | 'KNIFE';
 
 export interface WeaponStats {
   damage: number;
