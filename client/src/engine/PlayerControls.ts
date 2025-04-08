@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Vector3 } from 'three';
 import { PlayerAction } from '../types/game';
-import { ShotInfo } from '../types/weapons';
+import { ShotInfo, WeaponType } from '../types/weapons';
 import { SoundManager } from './SoundManager';
 import { WeaponSystem } from './WeaponSystem';
 
@@ -66,6 +66,7 @@ export class PlayerControls {
   private boundMouseUp: (event: MouseEvent) => void;
   private boundMouseClick: (event: MouseEvent) => void;
   private boundContextMenu: (event: Event) => void;
+  private boundWheel: (event: WheelEvent) => void;
   private pointerLocked: boolean = false;
 
   // Add new member variables for tracking rotation
@@ -105,6 +106,7 @@ export class PlayerControls {
     this.boundMouseUp = this.onMouseUp.bind(this);
     this.boundMouseClick = this.onMouseClick.bind(this);
     this.boundContextMenu = (e: Event) => e.preventDefault();
+    this.boundWheel = this.onWheel.bind(this);
 
     this.setupEventListeners();
     
@@ -135,6 +137,7 @@ export class PlayerControls {
     document.addEventListener('mouseup', this.boundMouseUp);
     document.addEventListener('click', this.boundMouseClick);
     document.addEventListener('contextmenu', this.boundContextMenu);
+    document.addEventListener('wheel', this.boundWheel);
     
     // Set up pointer lock
     document.addEventListener('click', this.requestPointerLock.bind(this));
@@ -359,6 +362,28 @@ export class PlayerControls {
 
   private onMouseClick(): void {
     // Additional click handling if needed
+  }
+
+  private onWheel(event: WheelEvent): void {
+    if (!this.pointerLocked || !this.controlsEnabled) return;
+
+    const weapons: WeaponType[] = ['RIFLE', 'SMG', 'PISTOL', 'SNIPER'];
+    const currentWeapon = this.weaponSystem.getCurrentWeapon();
+    
+    if (!currentWeapon) return;
+
+    const currentIndex = weapons.indexOf(currentWeapon.type);
+    let newIndex: number;
+
+    if (event.deltaY > 0) {
+      // Scrolling down - next weapon
+      newIndex = (currentIndex + 1) % weapons.length;
+    } else {
+      // Scrolling up - previous weapon
+      newIndex = (currentIndex - 1 + weapons.length) % weapons.length;
+    }
+
+    this.weaponSystem.equipWeapon(weapons[newIndex], `Default ${weapons[newIndex]}`);
   }
 
   public update(deltaTime: number): void {
@@ -626,6 +651,7 @@ export class PlayerControls {
     document.removeEventListener('mouseup', this.boundMouseUp);
     document.removeEventListener('click', this.boundMouseClick);
     document.removeEventListener('contextmenu', this.boundContextMenu);
+    document.removeEventListener('wheel', this.boundWheel);
     document.removeEventListener('pointerlockerror', this.onPointerLockError.bind(this));
     
     document.exitPointerLock();
