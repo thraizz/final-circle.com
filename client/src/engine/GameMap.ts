@@ -278,7 +278,7 @@ export class GameMap {
     });
 
     // Create a cone geometry for the light beam
-    const beamHeight = 200; // Height of the light beam
+    const beamHeight = 2000; // Height of the light beam
     const beamTopRadius = 15; // Radius at the top of the beam
     const beamBottomRadius = 8; // Radius at the bottom of the beam (matches nexus width)
     const beamGeometry = new THREE.CylinderGeometry(beamTopRadius, beamBottomRadius, beamHeight, 16);
