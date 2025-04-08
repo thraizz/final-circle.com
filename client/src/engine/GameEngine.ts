@@ -630,6 +630,10 @@ export class GameEngine {
         this.handlePlayerAction.bind(this),
         this.gameMap.getObstacles()
       );
+
+      // Enable controls and request pointer lock
+      this.playerControls.enableControls();
+      document.body.requestPointerLock();
     } else {
       // Switch to spectator mode
       this.isSpectatorMode = true;
