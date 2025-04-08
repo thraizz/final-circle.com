@@ -39,7 +39,8 @@ export class PlayerControls {
   private controlsEnabled: boolean = false;
   private soundManager: SoundManager;
   private lastStepTime: number = 0;
-  private stepInterval: number = 0.4; // Time between step sounds in seconds
+  private stepInterval: number = 0.4;
+  private sprintStepInterval: number = 0.3;
   private wasInAir: boolean = false;
   
   // Lean properties
@@ -498,7 +499,8 @@ export class PlayerControls {
         // Play step sound when moving on ground
         if (this.isMoving) {
           const currentTime = performance.now() / 1000;
-          if (currentTime - this.lastStepTime >= this.stepInterval) {
+          const currentStepInterval = this.getCurrentStepInterval();
+          if (currentTime - this.lastStepTime >= currentStepInterval) {
             this.soundManager.playSound('step', 0.3);
             this.lastStepTime = currentTime;
           }
@@ -700,5 +702,12 @@ export class PlayerControls {
         },
       });
     }
+  }
+
+  private getCurrentStepInterval(): number {
+    if (this.isSuperSpeed) {
+      return this.sprintStepInterval * 0.5; // Even faster for super speed
+    }
+    return this.isSprinting ? this.sprintStepInterval : this.stepInterval;
   }
 } 
