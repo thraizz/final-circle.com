@@ -360,6 +360,9 @@ export class PlayerControls {
         position: this.player.position,
         rotation: this.getCameraRotationAsVector3(),
         direction: shot.direction,
+        hitObstacle: shot.hitObstacle,
+        hitPoint: shot.hitPoint,
+        hitDistance: shot.hitDistance
       },
     });
   }
@@ -672,6 +675,8 @@ export class PlayerControls {
   // Add method to update obstacles dynamically
   public updateObstacles(obstacles: THREE.Mesh[]): void {
     this.obstacles = obstacles;
+    // Also update obstacles in the weapon system for raycasting
+    this.weaponSystem.updateObstacles(obstacles);
   }
 
   // Add this new method for leaning

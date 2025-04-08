@@ -247,6 +247,13 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 			logger.DebugLogger.Printf("Player %s fired a shot in direction (%.2f, %.2f, %.2f)",
 				id,
 				action.Data.Direction.X, action.Data.Direction.Y, action.Data.Direction.Z)
+
+			// Check if the shot hit an obstacle
+			if action.Data.HitObstacle != nil && *action.Data.HitObstacle {
+				// Don't process player hits when an obstacle was hit
+				return nil
+			}
+
 			sm.HandleDirectionalShot(id, *action.Data.Direction)
 		}
 	case "reload":

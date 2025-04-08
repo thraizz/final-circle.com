@@ -399,7 +399,7 @@ export class GameMap {
     const rotation = new THREE.Euler();
     const scale = new THREE.Vector3();
     
-    vegetationTypes.forEach(({ geometry, baseScale, count, heightRange }) => {
+    vegetationTypes.forEach(({ geometry, baseScale, count, heightRange, name }) => {
       const instancedMesh = new THREE.InstancedMesh(
         geometry,
         this.materials.vegetation,
@@ -407,6 +407,11 @@ export class GameMap {
       );
       instancedMesh.castShadow = true;
       instancedMesh.receiveShadow = true;
+      instancedMesh.name = `vegetation-${name}`;
+      
+      // Create individual meshes for each vegetation instance for proper raycasting
+      const actualInstanceCount = Math.min(count, 300); // Limit to a reasonable number to avoid performance issues
+      const vegetationMeshes: THREE.Mesh[] = [];
       
       for (let i = 0; i < count; i++) {
         const angle = (Math.random() * Math.PI * 2);
@@ -444,6 +449,26 @@ export class GameMap {
           
           matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
           instancedMesh.setMatrixAt(i, matrix);
+          
+          // For raycasting, create individual meshes for a subset of vegetation
+          if (i < actualInstanceCount) {
+            // Create an actual mesh for raycasting
+            const vegetationMesh = new THREE.Mesh(geometry.clone(), this.materials.vegetation);
+            vegetationMesh.position.copy(position);
+            vegetationMesh.rotation.copy(rotation);
+            vegetationMesh.scale.copy(scale);
+            vegetationMesh.updateMatrix();
+            vegetationMesh.matrixAutoUpdate = false; // Performance optimization
+            vegetationMesh.castShadow = true;
+            vegetationMesh.receiveShadow = true;
+            vegetationMesh.visible = false; // Hide the actual mesh, only used for raycasting
+            vegetationMesh.name = `vegetation-${name}-${i}`;
+            
+            // Add to obstacles for raycasting
+            this.obstacles.push(vegetationMesh);
+            vegetationMeshes.push(vegetationMesh);
+            spawnGroup.add(vegetationMesh);
+          }
         }
       }
       

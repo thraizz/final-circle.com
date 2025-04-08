@@ -38,4 +38,8 @@ export interface ShotInfo {
   direction: Vector3;
   weapon: Weapon;
   timestamp: number;
+  hitPoint?: Vector3;
+  hitNormal?: Vector3;
+  hitDistance?: number;
+  hitObstacle?: boolean;
 } 

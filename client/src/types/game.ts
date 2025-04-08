@@ -27,6 +27,9 @@ export interface PlayerActionData {
   direction?: Vector3;
   weaponId?: string;
   lean?: number;
+  hitObstacle?: boolean;
+  hitPoint?: Vector3;
+  hitDistance?: number;
 }
 
 export type PlayerActionType = 'move' | 'jump' | 'shoot' | 'reload' | 'switchWeapon';

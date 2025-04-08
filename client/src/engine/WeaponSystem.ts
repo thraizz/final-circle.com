@@ -1,10 +1,10 @@
 import * as THREE from "three";
 import {
-  ShotInfo,
-  Weapon,
-  WeaponState,
-  WeaponStats,
-  WeaponType,
+    ShotInfo,
+    Weapon,
+    WeaponState,
+    WeaponStats,
+    WeaponType,
 } from "../types/weapons";
 import { SoundManager } from "./SoundManager";
 
@@ -32,6 +32,7 @@ export class WeaponSystem {
   private static readonly tempQuaternion = new THREE.Quaternion();
   private static readonly xAxis = new THREE.Vector3(1, 0, 0);
   private static readonly yAxis = new THREE.Vector3(0, 1, 0);
+  private static readonly raycaster = new THREE.Raycaster();
 
   // Weapon definitions with balanced stats for competitive play
   private static readonly WEAPONS: Record<WeaponType, WeaponStats> = {
@@ -142,6 +143,8 @@ export class WeaponSystem {
   private lastInsertEffectTime: number = 0;
   // Pool of particle objects for reuse
   private particlePool: THREE.Mesh[] = [];
+
+  private obstacles: THREE.Mesh[] = [];
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -456,6 +459,43 @@ export class WeaponSystem {
     return weapon.type === 'KNIFE';
   }
 
+  public updateObstacles(obstacles: THREE.Mesh[]): void {
+    this.obstacles = obstacles;
+    console.log(`WeaponSystem: Updated obstacles, count=${obstacles.length}`);
+    
+    // Log the first few obstacles with their positions for debugging
+    if (obstacles.length > 0) {
+      for (let i = 0; i < Math.min(3, obstacles.length); i++) {
+        const pos = new THREE.Vector3();
+        obstacles[i].getWorldPosition(pos);
+        console.log(`Obstacle ${i}: Position (${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}), Name: ${obstacles[i].name || 'unnamed'}`);
+      }
+    }
+  }
+
+  /**
+   * Performs a raycast to check if there's any obstacle between the origin and the target direction
+   * @param origin The starting point of the ray
+   * @param direction The direction of the ray
+   * @param maxDistance Maximum distance to check for obstacles
+   * @returns Information about the hit or null if no obstacle was hit
+   */
+  private checkRaycastCollision(
+    origin: THREE.Vector3,
+    direction: THREE.Vector3,
+    maxDistance: number
+  ): THREE.Intersection | null {
+    // Set up the raycaster
+    WeaponSystem.raycaster.set(origin, direction);
+    WeaponSystem.raycaster.far = maxDistance;
+    
+    // Perform the raycast against obstacles
+    const intersections = WeaponSystem.raycaster.intersectObjects(this.obstacles, true);
+    
+    // Return the first intersection if any
+    return intersections.length > 0 ? intersections[0] : null;
+  }
+
   public shoot(): boolean {
     if (
       !this.currentWeapon ||
@@ -555,14 +595,31 @@ export class WeaponSystem {
     WeaponSystem.tempDirection.y += (Math.random() - 0.5) * spread;
     WeaponSystem.tempDirection.normalize();
 
+    // Check for collisions with obstacles using raycasting
+    const origin = WeaponSystem.tempVector.copy(this.camera.position);
+    const raycastHit = this.checkRaycastCollision(
+      origin,
+      WeaponSystem.tempDirection,
+      this.currentWeapon.stats.range
+    );
+    
+    // Create visual hit effect at the point of impact
+    if (raycastHit) {
+      this.createHitEffect(raycastHit.point, raycastHit.face?.normal);
+    }
+
     // Create shot info using reusable vector
     const shotInfo: ShotInfo = {
-      origin: WeaponSystem.tempVector.copy(this.camera.position),
-      direction: WeaponSystem.tempDirection.clone(), // Need to clone for shot record
+      origin: origin.clone(), // Clone for shot record
+      direction: WeaponSystem.tempDirection.clone(), // Clone for shot record
       weapon: this.currentWeapon,
       timestamp: now,
+      hitPoint: raycastHit ? raycastHit.point.clone() : undefined,
+      hitNormal: raycastHit && raycastHit.face ? raycastHit.face.normal.clone() : undefined,
+      hitDistance: raycastHit ? raycastHit.distance : undefined,
+      hitObstacle: raycastHit ? true : false,
     };
-
+    
     // Update weapon state
     if (this.currentWeapon.type !== "KNIFE") {
       this.currentWeapon.currentAmmo--;
@@ -584,6 +641,46 @@ export class WeaponSystem {
     // Notify shot handler
     this.onShoot(shotInfo);
     return true;
+  }
+
+  private createHitEffect(position: THREE.Vector3, normal?: THREE.Vector3): void {
+    // Create a small particle effect at the hit position
+    const hitParticle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 8, 8),
+      new THREE.MeshBasicMaterial({
+        color: 0xffaa00,
+        transparent: true,
+        opacity: 1.0,
+      })
+    );
+    
+    // Position at the hit point
+    hitParticle.position.copy(position);
+    
+    // If we have a normal, offset slightly to avoid z-fighting
+    if (normal) {
+      hitParticle.position.addScaledVector(normal, 0.01);
+    }
+    
+    // Add to the scene
+    this.camera.parent?.add(hitParticle);
+    
+    // Animate the particle effect
+    let progress = 0;
+    const animateHit = () => {
+      progress += 0.05;
+      if (progress >= 1) {
+        hitParticle.parent?.remove(hitParticle);
+        return;
+      }
+      
+      hitParticle.scale.set(1 + progress, 1 + progress, 1 + progress);
+      (hitParticle.material as THREE.MeshBasicMaterial).opacity = 1 - progress;
+      
+      requestAnimationFrame(animateHit);
+    };
+    
+    animateHit();
   }
 
   private createMuzzleFlash(): void {

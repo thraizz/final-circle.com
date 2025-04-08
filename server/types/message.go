@@ -49,11 +49,14 @@ const (
 type PlayerAction struct {
 	Type string `json:"type"`
 	Data struct {
-		Position  *Vector3 `json:"position,omitempty"`
-		Rotation  *Vector3 `json:"rotation,omitempty"`
-		Target    *Vector3 `json:"target,omitempty"`
-		Direction *Vector3 `json:"direction,omitempty"`
-		WeaponID  string   `json:"weaponId,omitempty"`
+		Position    *Vector3 `json:"position,omitempty"`
+		Rotation    *Vector3 `json:"rotation,omitempty"`
+		Target      *Vector3 `json:"target,omitempty"`
+		Direction   *Vector3 `json:"direction,omitempty"`
+		WeaponID    string   `json:"weaponId,omitempty"`
+		HitObstacle *bool    `json:"hitObstacle,omitempty"`
+		HitPoint    *Vector3 `json:"hitPoint,omitempty"`
+		HitDistance *float64 `json:"hitDistance,omitempty"`
 	} `json:"data"`
 }
 

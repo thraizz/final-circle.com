@@ -300,6 +300,33 @@ func (gs *GameServer) handleMessage(client *WebsocketClient, message []byte) {
 			if weaponId, ok := actionData["weaponId"].(string); ok {
 				action.Data.WeaponID = weaponId
 			}
+
+			// Handle hitObstacle
+			if hitObstacle, ok := actionData["hitObstacle"].(bool); ok {
+				boolVal := hitObstacle
+				action.Data.HitObstacle = &boolVal
+
+				// Handle hitPoint if there's an obstacle hit
+				if hitPointData, ok := actionData["hitPoint"].(map[string]interface{}); ok {
+					hitPoint := &types.Vector3{}
+					if x, ok := hitPointData["x"].(float64); ok {
+						hitPoint.X = x
+					}
+					if y, ok := hitPointData["y"].(float64); ok {
+						hitPoint.Y = y
+					}
+					if z, ok := hitPointData["z"].(float64); ok {
+						hitPoint.Z = z
+					}
+					action.Data.HitPoint = hitPoint
+				}
+
+				// Handle hitDistance
+				if hitDistance, ok := actionData["hitDistance"].(float64); ok {
+					distance := hitDistance
+					action.Data.HitDistance = &distance
+				}
+			}
 		}
 
 		if err := gs.stateManager.HandlePlayerAction(client.ID, action); err != nil {
