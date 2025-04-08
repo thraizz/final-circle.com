@@ -17,6 +17,7 @@
     "@types/three": "^0.174.0",
     "@vitest/coverage-v8": "^3.0.9",
     "bad-words": "^4.0.0",
+    "cannon-es": "^0.20.0",
     "jsdom": "^26.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

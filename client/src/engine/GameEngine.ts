@@ -105,7 +105,7 @@ export class GameEngine {
       soundManager.loadSound('smg_reload', '/assets/sounds/smg_reload.wav'),
       soundManager.loadSound('pistol_reload', '/assets/sounds/pistol_reload.wav'),
       soundManager.loadSound('sniper_reload', '/assets/sounds/sniper_reload.wav'),
-      soundManager.loadSound('player_death', '/assets/sounds/player_death.wav'),
+      soundManager.loadSound('player_death', '/assets/sounds/player_death.mp3'),
       soundManager.loadSound('player_kill', '/assets/sounds/player_kill.wav'),
       soundManager.loadSound('step', '/assets/sounds/step_sound.wav'),
       soundManager.loadSound('impact', '/assets/sounds/impact_sound.wav'),
