@@ -57,6 +57,8 @@ type PlayerAction struct {
 		HitObstacle *bool    `json:"hitObstacle,omitempty"`
 		HitPoint    *Vector3 `json:"hitPoint,omitempty"`
 		HitDistance *float64 `json:"hitDistance,omitempty"`
+		Amount      *int     `json:"amount,omitempty"`    // For healing amount
+		NewHealth   *int     `json:"newHealth,omitempty"` // New health after healing
 	} `json:"data"`
 }
 
@@ -110,7 +112,7 @@ func validatePlayerAction(action *PlayerAction) error {
 	}
 
 	switch action.Type {
-	case "move", "jump", "shoot", "reload":
+	case "move", "jump", "shoot", "reload", "heal":
 		// Valid action types
 	default:
 		return ErrInvalidActionType

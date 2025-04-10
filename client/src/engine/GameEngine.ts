@@ -3,6 +3,7 @@ import { BACKEND } from '../config';
 import { ErrorMessage, GameState, PlayerAction } from '../types/game';
 import { GameMap } from './GameMap';
 import { HUD, HUDConfig } from './HUD';
+import { MedipackSystem } from './MedipackSystem';
 import { PlayerControls } from './PlayerControls';
 import { SoundManager } from './SoundManager';
 import { SpectatorControls } from './SpectatorControls';
@@ -24,6 +25,8 @@ export class GameEngine {
   private players: Map<string, THREE.Object3D>;
   private gameMap: GameMap;
   private hud: HUD;
+  private medipackSystem: MedipackSystem;
+  private maxPlayerHealth: number = 100;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private connectionReady: boolean = false;
@@ -163,6 +166,12 @@ export class GameEngine {
       this.handlePlayerAction.bind(this),
       this.gameMap.getObstacles()
     );
+
+    // Initialize medipack system
+    this.medipackSystem = new MedipackSystem(this.scene);
+    
+    // Setup medipacks at predetermined locations
+    this.setupMedipacks();
 
     // HUD setup
     this.hud = new HUD(hudConfig);
@@ -509,6 +518,36 @@ export class GameEngine {
       }
       this.lastObstacleUpdate = currentTime;
     }
+
+    // Update medipack system and check for pickup
+    this.medipackSystem.update();
+    
+    if (this.playerId && this.gameState.players[this.playerId]) {
+      const playerObj = this.gameState.players[this.playerId];
+      
+      // Check for medipack pickup
+      if (playerObj.health < this.maxPlayerHealth) {
+        const healAmount = this.medipackSystem.checkPickup(
+          playerObj.position, 
+          playerObj.health, 
+          this.maxPlayerHealth
+        );
+        
+        if (healAmount > 0) {
+          // Apply healing locally and send to server
+          const newHealth = Math.min(playerObj.health + healAmount, this.maxPlayerHealth);
+          
+          // Update local game state
+          this.gameState.players[this.playerId].health = newHealth;
+          
+          // Send healing action to server
+          this.sendMessage('heal', {
+            amount: healAmount,
+            newHealth: newHealth
+          });
+        }
+      }
+    }
   }
 
   private createPlayerObject(isMainPlayer: boolean): THREE.Object3D {
@@ -612,6 +651,9 @@ export class GameEngine {
     this.disconnect();
     window.removeEventListener('resize', this.boundHandleResize);
     window.removeEventListener('keydown', this.boundHandleKeyDown);
+    
+    // Clean up medipack system
+    this.medipackSystem.cleanup();
   }
 
   public getRenderer(): THREE.WebGLRenderer {
@@ -680,5 +722,25 @@ export class GameEngine {
     if (event.code === 'KeyV') {
       this.toggleSpectatorMode();
     }
+  }
+
+  /**
+   * Setup medipacks at strategic locations on the map
+   */
+  private setupMedipacks(): void {
+    // Define medipack spawn positions
+    const medipackPositions = [
+      new THREE.Vector3(50, 0, 50),    // North east
+      new THREE.Vector3(-50, 0, 50),   // North west
+      new THREE.Vector3(50, 0, -50),   // South east
+      new THREE.Vector3(-50, 0, -50),  // South west
+      new THREE.Vector3(0, 0, 75),     // North
+      new THREE.Vector3(0, 0, -75),    // South
+      new THREE.Vector3(75, 0, 0),     // East
+      new THREE.Vector3(-75, 0, 0)     // West
+    ];
+    
+    // Setup medipacks
+    this.medipackSystem.setupMedipacks(medipackPositions);
   }
 } 

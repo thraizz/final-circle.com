@@ -13,4 +13,5 @@ var (
 	ErrGameNotActive       = errors.New("game is not active")
 	ErrPlayerNotFound      = errors.New("player not found")
 	ErrPlayerAlreadyExists = errors.New("player already exists")
+	ErrPlayerDead          = errors.New("player is dead")
 )

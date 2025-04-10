@@ -12,12 +12,17 @@ var (
 	ErrorLogger *log.Logger
 	// DebugLogger logs debug messages (only in development)
 	DebugLogger *log.Logger
+	// WarningLogger logs warning messages
+	WarningLogger *log.Logger
 )
 
 // Init initializes the loggers based on the environment
 func Init(isDevelopment bool) {
 	// Error logger always logs to stderr
 	ErrorLogger = log.New(os.Stderr, "ERROR: ", log.LstdFlags)
+
+	// Warning logger logs to stderr
+	WarningLogger = log.New(os.Stderr, "WARNING: ", log.LstdFlags)
 
 	if isDevelopment {
 		// In development, log everything to stdout with different prefixes

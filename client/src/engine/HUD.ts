@@ -51,10 +51,10 @@ export class HUD {
     
     // Create HUD container
     this.container = document.createElement('div');
-    this.container.className = 'game-hud';
+    this.container.className = 'hud-container';
     
     // Create HUD elements
-    this.fpsDisplay = this.createHUDElement('fps', 'FPS: --');
+    this.fpsDisplay = this.createHUDElement('fps', 'FPS: 0');
     this.healthDisplay = this.createHUDElement('health', 'Health: 100');
     this.ammoDisplay = this.createHUDElement('ammo', 'Ammo: 0/0');
     this.weaponDisplay = this.createHUDElement('weapon', 'Weapon: None');
@@ -65,7 +65,24 @@ export class HUD {
     this.crosshairDisplay = document.createElement('div');
     this.crosshairDisplay.className = 'crosshair';
     
-    // Create center dot
+    // Add crosshair lines
+    const leftLine = document.createElement('div');
+    leftLine.className = 'crosshair-line left';
+    this.crosshairDisplay.appendChild(leftLine);
+    
+    const rightLine = document.createElement('div');
+    rightLine.className = 'crosshair-line right';
+    this.crosshairDisplay.appendChild(rightLine);
+    
+    const topLine = document.createElement('div');
+    topLine.className = 'crosshair-line top';
+    this.crosshairDisplay.appendChild(topLine);
+    
+    const bottomLine = document.createElement('div');
+    bottomLine.className = 'crosshair-line bottom';
+    this.crosshairDisplay.appendChild(bottomLine);
+    
+    // Add center dot
     const centerDot = document.createElement('div');
     centerDot.className = 'crosshair-dot';
     this.crosshairDisplay.appendChild(centerDot);
@@ -131,22 +148,19 @@ export class HUD {
   private addStyles(): void {
     const style = document.createElement('style');
     style.textContent = `
-      .game-hud {
-        position: absolute;
-        bottom: 20px;
-        left: 20px;
-        right: 20px;
-        color: white;
-        font-family: 'Arial', sans-serif;
-        font-size: 14px;
+      .hud-container {
+        position: fixed;
+        width: 100%;
+        height: 100%;
         pointer-events: none;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
         z-index: 1000;
+        font-family: 'Arial', sans-serif;
+        color: white;
       }
       
       .hud-element {
+        position: absolute;
+        margin: 10px;
         padding: 8px 12px;
         background-color: rgba(0, 0, 0, 0.5);
         border-radius: 4px;
@@ -165,38 +179,55 @@ export class HUD {
         z-index: 1000;
         pointer-events: none;
         --crosshair-color: rgba(255, 255, 255, 0.9);
+        --crosshair-gap: 5px;
       }
       
-      .crosshair::before,
-      .crosshair::after {
-        content: '';
+      .crosshair-line {
         position: absolute;
         background-color: var(--crosshair-color);
         box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
       }
       
-      .crosshair::before {
-        width: 14px;
+      /* Left line */
+      .crosshair-line.left {
+        width: 8px;
         height: 2px;
         top: 9px;
-        left: 3px;
+        right: calc(10px + var(--crosshair-gap));
       }
       
-      .crosshair::after {
+      /* Right line */
+      .crosshair-line.right {
+        width: 8px;
+        height: 2px;
+        top: 9px;
+        left: calc(10px + var(--crosshair-gap));
+      }
+      
+      /* Top line */
+      .crosshair-line.top {
         width: 2px;
-        height: 14px;
-        top: 3px;
+        height: 8px;
+        bottom: calc(10px + var(--crosshair-gap));
+        left: 9px;
+      }
+      
+      /* Bottom line */
+      .crosshair-line.bottom {
+        width: 2px;
+        height: 8px;
+        top: calc(10px + var(--crosshair-gap));
         left: 9px;
       }
       
       .crosshair-dot {
         position: absolute;
-        width: 4px;
-        height: 4px;
+        width: 2px;
+        height: 2px;
         background-color: var(--crosshair-color);
         border-radius: 50%;
-        top: 8px;
-        left: 8px;
+        top: 9px;
+        left: 9px;
         box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
       }
       
@@ -562,8 +593,6 @@ export class HUD {
   private stopLowHealthEffect(): void {
     if (this.lowHealthAnimationId !== null) {
       cancelAnimationFrame(this.lowHealthAnimationId);
-      this.lowHealthAnimationId = null;
-      this.lowHealthOverlay.style.display = 'none';
     }
   }
   
@@ -583,12 +612,11 @@ export class HUD {
       
       if (this.config.showWeaponInfo) {
         const aimingText = weaponState.isAiming ? ' (Aiming)' : '';
-        const accuracyPct = Math.round(weaponState.currentAccuracy * 100);
-        this.weaponDisplay.textContent = `${weapon.name}${aimingText} | Accuracy: ${accuracyPct}%`;
+        this.weaponDisplay.textContent = `${weapon.name}${aimingText}`;
       }
       
-      // Update crosshair color based on aiming state
-      this.updateCrosshairForAiming(weaponState.isAiming);
+      // Update crosshair and accuracy indicator based on accuracy
+      this.updateCrosshairForAiming(weaponState.isAiming, weaponState.currentAccuracy);
     } else {
       if (this.config.showAmmo) {
         this.ammoDisplay.textContent = 'Ammo: --/--';
@@ -598,27 +626,32 @@ export class HUD {
         this.weaponDisplay.textContent = 'Weapon: None';
       }
       
-      // Reset crosshair color
-      this.updateCrosshairForAiming(false);
+      // Reset crosshair
+      this.updateCrosshairForAiming(false, 1);
     }
   }
   
   /**
-   * Updates the crosshair appearance based on aiming state
+   * Updates the crosshair appearance based on aiming state and accuracy
    */
-  private updateCrosshairForAiming(isAiming: boolean): void {
+  private updateCrosshairForAiming(isAiming: boolean, currentAccuracy: number = 1): void {
     if (!this.config.showCrosshair) return;
     
     const color = isAiming ? 'rgba(255, 50, 50, 0.9)' : 'rgba(255, 255, 255, 0.9)';
     
-    // Update the pseudoelements by updating a custom property
+    // Update the crosshair color
     this.crosshairDisplay.style.setProperty('--crosshair-color', color);
     
-    // Update the center dot directly
-    const centerDot = this.crosshairDisplay.querySelector('.crosshair-dot');
-    if (centerDot) {
-      (centerDot as HTMLElement).style.backgroundColor = color;
-    }
+    // Calculate gap based on accuracy (1 = perfect accuracy, smallest gap)
+    // For worst accuracy (0), the gap is 20px, for best (1), the gap is 3px
+    const gap = Math.max(3, 20 - (currentAccuracy * 17));
+    this.crosshairDisplay.style.setProperty('--crosshair-gap', `${gap}px`);
+    
+    // Update all crosshair elements with the new color
+    const crosshairElements = this.crosshairDisplay.querySelectorAll('.crosshair-line, .crosshair-dot');
+    crosshairElements.forEach(element => {
+      (element as HTMLElement).style.backgroundColor = color;
+    });
   }
   
   public updateGameState(gameState: GameState, localPlayerId: string | null): void {

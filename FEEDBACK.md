@@ -1,0 +1,21 @@
+FEEDBACK
+
+- [x] Reduce reload time
+- [x] Add indicator when killing players
+- [x] Add sound effects
+- [x] Add scroll to switch weapons
+- [x] Add knife
+- [x] zoom in with guns when aiming, based on weapon type. For the sniper, it should zoom in a lot and show a scope overlay
+- [x] Add raycast calculation for shooting so that you can take cover
+- [x] Add healing mechanic (medipack), which are spawned in the map and can be picked up by players. They should respawn after a while
+- [x] Visualize accuracy over crosshair instead of 'accuracy: x%' text
+- [ ] Implement a draw distance system so that we don't load in unnecessary geometry
+- [ ] Replace the vegtation object system with a new, generative approach where we have a seed on the server side, and then the vegetation and objects is generated based on that seed.
+- [ ] Add houses to the map (houses should be generated based on the seed too)
+- [ ] Make lobby selection work. There should be a 'small map' and 'large map' option. 'small map' is a lobby of ten players. 'large map' is a lobby of thirty players.
+  - we need to add a queue system so that when the queue is full, the game starts, if no one is waiting, a new lobby is created.
+  - Queuing should be done in the lobby screen, not in the game.
+  - The server should handle lobbies.
+  - the small map should be the current map.
+  - the large map should be the current map extended with 4 additional areas.
+- [ ] Make dead players spectate their killer and show the option to quit the game or requeue.

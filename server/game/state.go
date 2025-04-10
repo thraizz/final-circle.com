@@ -209,58 +209,43 @@ func (sm *StateManager) GetState() *types.GameState {
 	return sm.state
 }
 
-// HandlePlayerAction handles a player's action
+// HandlePlayerAction processes a player's action
 func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
 	player, exists := sm.state.Players[id]
 	if !exists {
-		logger.InfoLogger.Printf("Action rejected: player %s not found", id)
 		return types.ErrPlayerNotFound
 	}
 
 	if !player.IsAlive {
-		logger.InfoLogger.Printf("Action rejected: player %s is not alive", id)
-		return types.ErrGameNotActive
+		return types.ErrPlayerDead
 	}
 
 	switch action.Type {
 	case "move":
 		if action.Data.Position != nil {
 			player.Position = *action.Data.Position
-
 		}
 		if action.Data.Rotation != nil {
 			player.Rotation = *action.Data.Rotation
 		}
 	case "jump":
-		logger.DebugLogger.Printf("Player %s jumped", id)
-		// Implement jump mechanics
+		// Could add jump mechanics here
 	case "shoot":
 		if action.Data.Target != nil {
-			logger.DebugLogger.Printf("Player %s fired a shot at position (%.2f, %.2f, %.2f)",
-				id,
-				action.Data.Target.X, action.Data.Target.Y, action.Data.Target.Z)
 			sm.HandleShot(id, *action.Data.Target)
 		} else if action.Data.Direction != nil {
-			logger.DebugLogger.Printf("Player %s fired a shot in direction (%.2f, %.2f, %.2f)",
-				id,
-				action.Data.Direction.X, action.Data.Direction.Y, action.Data.Direction.Z)
-
-			// Check if the shot hit an obstacle
-			if action.Data.HitObstacle != nil && *action.Data.HitObstacle {
-				// Don't process player hits when an obstacle was hit
-				return nil
-			}
-
 			sm.HandleDirectionalShot(id, *action.Data.Direction)
 		}
 	case "reload":
-		logger.DebugLogger.Printf("Player %s reloading weapon", id)
-		// Implement reload mechanics
+		// Reload is handled client-side for now
+	case "heal":
+		// Handle healing action
+		sm.HandleHealAction(id, action)
 	default:
-		logger.InfoLogger.Printf("Unknown action type from player %s: %s", id, action.Type)
+		return types.ErrInvalidActionType
 	}
 
 	return nil
@@ -666,5 +651,57 @@ func (sm *StateManager) UpdatePlayerName(id string, displayName string) error {
 	oldName := player.DisplayName
 	player.DisplayName = displayName
 	logger.DebugLogger.Printf("Player %s changed name: '%s' -> '%s'", id, oldName, displayName)
+	return nil
+}
+
+// HandleHealAction processes a player healing action
+func (sm *StateManager) HandleHealAction(id string, action types.PlayerAction) error {
+	player, exists := sm.state.Players[id]
+	if !exists {
+		return types.ErrPlayerNotFound
+	}
+
+	if !player.IsAlive {
+		return types.ErrPlayerDead
+	}
+
+	// Extract healing data
+	if action.Data.Amount == nil || action.Data.NewHealth == nil {
+		return types.ErrInvalidPayload
+	}
+
+	healAmount := *action.Data.Amount
+	newHealth := *action.Data.NewHealth
+
+	// Validate healing amount is reasonable (prevent cheating)
+	if healAmount <= 0 || healAmount > 100 {
+		logger.WarningLogger.Printf("Invalid heal amount from player %s: %d", id, healAmount)
+		return types.ErrInvalidPayload
+	}
+
+	// Ensure new health is consistent with healing amount
+	maxHealth := 100
+	expectedHealth := player.Health + healAmount
+	if expectedHealth > maxHealth {
+		expectedHealth = maxHealth
+	}
+
+	// Allow small tolerance for client-server differences
+	tolerance := 5
+	if newHealth > expectedHealth+tolerance || newHealth < expectedHealth-tolerance {
+		logger.WarningLogger.Printf("Inconsistent heal values from player %s: amount=%d, current=%d, new=%d, expected=%d",
+			id, healAmount, player.Health, newHealth, expectedHealth)
+		newHealth = expectedHealth
+	}
+
+	// Apply the healing
+	player.Health = newHealth
+	if player.Health > maxHealth {
+		player.Health = maxHealth
+	}
+
+	logger.DebugLogger.Printf("Player %s (%s) healed for %d health. New health: %d",
+		id, player.DisplayName, healAmount, player.Health)
+
 	return nil
 }
