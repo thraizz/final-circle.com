@@ -9,6 +9,14 @@ export interface HUDConfig {
   showGameTime: boolean;
   showPlayerCount: boolean;
   showCrosshair: boolean;
+  debugMode: boolean;
+}
+
+export interface DebugInfo {
+  drawDistance?: number;
+  visibleObjects?: number;
+  hiddenObjects?: number;
+  [key: string]: number | string | undefined;
 }
 
 export class HUD {
@@ -26,6 +34,7 @@ export class HUD {
   private deathOverlay: HTMLDivElement;
   private lowHealthOverlay: HTMLDivElement;
   private killIndicator: HTMLDivElement;
+  private debugDisplay: HTMLDivElement;
   private config: HUDConfig;
   private frames: number[];
   private lastFrameTime: number;
@@ -42,6 +51,7 @@ export class HUD {
       showGameTime: true,
       showPlayerCount: true,
       showCrosshair: true,
+      debugMode: false,
       ...config
     };
     
@@ -60,6 +70,12 @@ export class HUD {
     this.weaponDisplay = this.createHUDElement('weapon', 'Weapon: None');
     this.gameTimeDisplay = this.createHUDElement('game-time', 'Time: 00:00');
     this.playerCountDisplay = this.createHUDElement('player-count', 'Players: 0');
+    
+    // Create debug display
+    this.debugDisplay = this.createHUDElement('debug', 'Debug Info');
+    this.debugDisplay.style.right = '10px';
+    this.debugDisplay.style.top = '50px';
+    this.debugDisplay.style.display = this.config.debugMode ? 'block' : 'none';
     
     // Create crosshair
     this.crosshairDisplay = document.createElement('div');
@@ -126,6 +142,9 @@ export class HUD {
       if (event.code === 'Tab') {
         event.preventDefault(); // Prevent default Tab behavior
         this.toggleLobbyOverlay(true);
+      } else if (event.code === 'F3') {
+        // Toggle debug mode with F3 key
+        this.toggleDebugMode();
       }
     });
     
@@ -208,151 +227,81 @@ export class HUD {
       .crosshair-line.top {
         width: 2px;
         height: 8px;
-        bottom: calc(10px + var(--crosshair-gap));
         left: 9px;
+        bottom: calc(10px + var(--crosshair-gap));
       }
       
       /* Bottom line */
       .crosshair-line.bottom {
         width: 2px;
         height: 8px;
-        top: calc(10px + var(--crosshair-gap));
         left: 9px;
+        top: calc(10px + var(--crosshair-gap));
       }
       
+      /* Center dot */
       .crosshair-dot {
         position: absolute;
         width: 2px;
         height: 2px;
-        background-color: var(--crosshair-color);
-        border-radius: 50%;
         top: 9px;
         left: 9px;
+        background-color: var(--crosshair-color);
+        border-radius: 50%;
         box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
       }
       
+      .hud-element.fps {
+        top: 10px;
+        right: 10px;
+      }
+      
       .hud-element.health {
-        position: absolute;
-        bottom: 0;
-        left: 0;
+        bottom: 10px;
+        left: 10px;
       }
       
       .hud-element.ammo {
-        position: absolute;
-        bottom: 0;
-        right: 0;
+        bottom: 10px;
+        right: 10px;
       }
       
       .hud-element.weapon {
-        position: absolute;
-        bottom: 40px;
-        right: 0;
-      }
-      
-      .hud-element.fps {
-        position: absolute;
-        top: 0;
-        right: 0;
-        font-size: 12px;
+        bottom: 50px;
+        right: 10px;
       }
       
       .hud-element.game-time {
-        position: absolute;
-        top: 0;
-        left: 50%;
-        transform: translateX(-50%);
+        top: 10px;
+        left: 10px;
       }
       
       .hud-element.player-count {
-        position: absolute;
-        top: 0;
-        left: 0;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
       }
       
       .hud-element.connection-status {
-        position: fixed;
-        top: 50px;
+        bottom: 50%;
         left: 50%;
         transform: translateX(-50%);
-        background-color: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 4px;
-        z-index: 2000;
-        font-weight: bold;
-        pointer-events: none;
+        background-color: rgba(255, 165, 0, 0.8);
+        padding: 15px 25px;
+        font-size: 18px;
         text-align: center;
+        z-index: 1100;
       }
       
       .hud-element.error-message {
-        position: fixed;
-        top: 100px;
+        bottom: 40%;
         left: 50%;
         transform: translateX(-50%);
-        background-color: rgba(204, 0, 0, 0.7);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 4px;
-        z-index: 2000;
-        font-weight: bold;
-        pointer-events: none;
+        background-color: rgba(255, 0, 0, 0.8);
+        padding: 15px 25px;
+        font-size: 18px;
         text-align: center;
-      }
-      
-      .lobby-overlay {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background-color: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 20px;
-        border-radius: 5px;
-        z-index: 1000;
-        min-width: 400px;
-        backdrop-filter: blur(5px);
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-      }
-      
-      .lobby-title {
-        text-align: center;
-        font-size: 24px;
-        margin-bottom: 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-        padding-bottom: 10px;
-      }
-      
-      .player-table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      
-      .player-table th, .player-table td {
-        padding: 8px;
-        text-align: left;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      }
-      
-      .player-table th {
-        font-weight: bold;
-        color: #aaa;
-      }
-      
-      .player-table tr:last-child td {
-        border-bottom: none;
-      }
-      
-      .player-row.local-player {
-        color: #33cc33;
-        font-weight: bold;
-      }
-      
-      .player-status-alive {
-        color: #33cc33;
-      }
-      
-      .player-status-dead {
-        color: #cc3333;
+        z-index: 1100;
       }
       
       .death-overlay {
@@ -361,7 +310,7 @@ export class HUD {
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(139, 0, 0, 0.4);
+        background-color: rgba(255, 0, 0, 0.3);
         z-index: 2000;
         display: flex;
         justify-content: center;
@@ -370,12 +319,10 @@ export class HUD {
       }
       
       .death-message {
-        font-family: 'Arial', sans-serif;
-        font-size: 72px;
+        font-size: 48px;
         font-weight: bold;
-        color: #ff0000;
-        text-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
-        animation: pulse 2s infinite;
+        color: #ffffff;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
       }
       
       .low-health-overlay {
@@ -384,52 +331,60 @@ export class HUD {
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(255, 0, 0, 0);
         pointer-events: none;
-        z-index: 1500;
+        z-index: 1050;
         box-shadow: inset 0 0 100px rgba(255, 0, 0, 0.5);
-        border: 0px solid rgba(255, 0, 0, 0);
-        border-width: 0 0 100vh 100vw;
-        border-radius: 50%;
-        box-sizing: border-box;
+      }
+      
+      .lobby-overlay {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80%;
+        max-width: 800px;
+        max-height: 80vh;
+        background-color: rgba(0, 0, 0, 0.8);
+        border-radius: 10px;
+        padding: 20px;
+        color: white;
+        z-index: 2000;
+        overflow-y: auto;
       }
       
       .kill-indicator {
         position: fixed;
-        top: 20%;
+        top: 25%;
         left: 50%;
         transform: translateX(-50%);
-        background-color: rgba(255, 0, 0, 0.8);
-        color: white;
-        padding: 10px 20px;
+        background-color: rgba(255, 255, 255, 0.2);
+        color: #ffffff;
         border-radius: 5px;
-        font-size: 24px;
-        font-weight: bold;
+        padding: 10px 20px;
         text-align: center;
-        z-index: 1000;
+        z-index: 1100;
         animation: fadeInOut 2s ease-in-out;
+        pointer-events: none;
       }
       
-      @keyframes pulse {
-        0% {
-          opacity: 0.8;
-          transform: scale(1);
-        }
-        50% {
-          opacity: 1;
-          transform: scale(1.1);
-        }
-        100% {
-          opacity: 0.8;
-          transform: scale(1);
-        }
+      .hud-element.debug {
+        top: 50px;
+        right: 10px;
+        background-color: rgba(0, 0, 0, 0.7);
+        font-family: monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        padding: 10px;
+        border: 1px solid rgba(0, 255, 255, 0.5);
+        max-width: 300px;
+        overflow: hidden;
       }
       
       @keyframes fadeInOut {
-        0% { opacity: 0; transform: translate(-50%, -20px); }
-        10% { opacity: 1; transform: translate(-50%, 0); }
-        90% { opacity: 1; transform: translate(-50%, 0); }
-        100% { opacity: 0; transform: translate(-50%, -20px); }
+        0% { opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { opacity: 0; }
       }
     `;
     document.head.appendChild(style);
@@ -451,6 +406,7 @@ export class HUD {
     this.gameTimeDisplay.style.display = this.config.showGameTime ? 'block' : 'none';
     this.playerCountDisplay.style.display = this.config.showPlayerCount ? 'block' : 'none';
     this.crosshairDisplay.style.display = this.config.showCrosshair ? 'block' : 'none';
+    this.debugDisplay.style.display = this.config.debugMode ? 'block' : 'none';
   }
   
   public updateConfig(config: Partial<HUDConfig>): void {
@@ -827,5 +783,39 @@ export class HUD {
       window.clearTimeout(this.errorMessageTimeout);
       this.errorMessageTimeout = null;
     }
+  }
+  
+  /**
+   * Toggle debug mode on/off
+   */
+  public toggleDebugMode(): void {
+    this.config.debugMode = !this.config.debugMode;
+    this.debugDisplay.style.display = this.config.debugMode ? 'block' : 'none';
+    console.log(`Debug mode: ${this.config.debugMode ? 'enabled' : 'disabled'}`);
+  }
+  
+  /**
+   * Check if debug mode is enabled
+   */
+  public isDebugEnabled(): boolean {
+    return this.config.debugMode;
+  }
+  
+  /**
+   * Update debug information display
+   */
+  public updateDebugInfo(debugInfo: DebugInfo): void {
+    if (!this.config.debugMode) return;
+    
+    let debugText = 'Debug Info:';
+    
+    // Add all debug info to display
+    Object.entries(debugInfo).forEach(([key, value]) => {
+      // Format the key with spaces before capital letters
+      const formattedKey = key.replace(/([A-Z])/g, ' $1').toLowerCase();
+      debugText += `<br>${formattedKey}: ${value}`;
+    });
+    
+    this.debugDisplay.innerHTML = debugText;
   }
 } 

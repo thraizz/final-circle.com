@@ -548,4 +548,41 @@ export class GameMap {
     this.obstacles = [];
     this.lights = [];
   }
+
+  /**
+   * Add a visual indicator for the draw distance boundary (for development only)
+   * @param drawDistance The current draw distance
+   * @param color The color of the indicator
+   */
+  public addDrawDistanceIndicator(drawDistance: number, color: number = 0x00ffff): THREE.Mesh {
+    // Remove any existing indicator
+    this.removeDrawDistanceIndicator();
+    
+    // Create a wireframe sphere to visualize the draw distance
+    const geometry = new THREE.SphereGeometry(drawDistance, 32, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color: color,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.2
+    });
+    
+    const indicator = new THREE.Mesh(geometry, material);
+    indicator.name = 'draw-distance-indicator';
+    
+    // The indicator should follow the camera, so we'll update its position in the game loop
+    this.scene.add(indicator);
+    
+    return indicator;
+  }
+  
+  /**
+   * Remove the draw distance indicator if it exists
+   */
+  public removeDrawDistanceIndicator(): void {
+    const indicator = this.scene.getObjectByName('draw-distance-indicator');
+    if (indicator) {
+      this.scene.remove(indicator);
+    }
+  }
 } 

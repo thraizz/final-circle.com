@@ -3,6 +3,7 @@ import { BACKEND } from '../config';
 import { ErrorMessage, GameState, PlayerAction } from '../types/game';
 import { GameMap } from './GameMap';
 import { HUD, HUDConfig } from './HUD';
+import { LODManager } from './LODManager';
 import { MedipackSystem } from './MedipackSystem';
 import { PlayerControls } from './PlayerControls';
 import { SoundManager } from './SoundManager';
@@ -43,6 +44,9 @@ export class GameEngine {
   private obstacleUpdateInterval: number = 1000; // Update obstacles every 1 second
   private playerPositions: Map<string, { x: number, y: number, z: number }> = new Map();
   private playerRotations: Map<string, { x: number, y: number, z: number }> = new Map();
+  
+  // Level of Detail management
+  private lodManager: LODManager;
 
   constructor(hudConfig?: Partial<HUDConfig>, playerName: string = 'Player') {
     // Store player name
@@ -172,6 +176,15 @@ export class GameEngine {
     
     // Setup medipacks at predetermined locations
     this.setupMedipacks();
+
+    // Initialize LOD manager for draw distance optimization
+    this.lodManager = new LODManager(this.scene, this.camera, {
+      maxDrawDistance: 1000,
+      updateInterval: 300  // Update LOD every 300ms for better responsiveness
+    });
+    
+    // Register scene objects with the LOD manager
+    this.registerObjectsWithLODManager();
 
     // HUD setup
     this.hud = new HUD(hudConfig);
@@ -596,6 +609,28 @@ export class GameEngine {
     // Update game state - ensure obstacles are updated if they change
     this.updateGameState();
     
+    // Update LOD manager to handle draw distance
+    this.lodManager.update();
+    
+    // Update draw distance visualization in debug mode
+    if (this.hud.isDebugEnabled()) {
+      // Get the draw distance indicator or create it if it doesn't exist
+      const indicator = this.scene.getObjectByName('draw-distance-indicator');
+      if (indicator) {
+        // Update the indicator position to follow the camera
+        indicator.position.copy(this.camera.position);
+      }
+      
+      // Add LOD stats to HUD
+      const lodStats = this.lodManager.getStats();
+      this.hud.updateDebugInfo({
+        drawDistance: lodStats.drawDistance,
+        visibleObjects: lodStats.visibleObjectCount,
+        hiddenObjects: lodStats.hiddenObjectCount,
+        totalObjects: this.scene.children.length
+      });
+    }
+    
     // Render the scene
     this.renderer.render(this.scene, this.camera);
   }
@@ -654,6 +689,9 @@ export class GameEngine {
     
     // Clean up medipack system
     this.medipackSystem.cleanup();
+    
+    // Clean up LOD manager
+    this.lodManager.cleanup();
   }
 
   public getRenderer(): THREE.WebGLRenderer {
@@ -721,6 +759,46 @@ export class GameEngine {
   private handleKeyDown(event: KeyboardEvent): void {
     if (event.code === 'KeyV') {
       this.toggleSpectatorMode();
+    } else if (event.code === 'KeyL') {
+      // Toggle draw distance visualization in debug mode
+      if (this.hud.isDebugEnabled()) {
+        // Cycle through different draw distances for testing
+        const currentDrawDistance = this.lodManager.getStats().drawDistance;
+        let newDrawDistance = currentDrawDistance;
+        
+        if (currentDrawDistance >= 1000) {
+          newDrawDistance = 500;
+        } else if (currentDrawDistance >= 500) {
+          newDrawDistance = 300;
+        } else if (currentDrawDistance >= 300) {
+          newDrawDistance = 1500;
+        } else {
+          newDrawDistance = 1000;
+        }
+        
+        this.lodManager.setMaxDrawDistance(newDrawDistance);
+        
+        // Update the draw distance indicator
+        const indicator = this.scene.getObjectByName('draw-distance-indicator');
+        if (indicator) {
+          this.gameMap.removeDrawDistanceIndicator();
+          this.gameMap.addDrawDistanceIndicator(newDrawDistance);
+        }
+        
+        console.log(`Draw distance set to: ${newDrawDistance}`);
+      }
+    } else if (event.code === 'F3') {
+      // Toggle debug mode
+      this.hud.toggleDebugMode();
+      
+      // Create or remove draw distance indicator
+      if (this.hud.isDebugEnabled()) {
+        // If debug mode is enabled, add the draw distance indicator
+        this.gameMap.addDrawDistanceIndicator(this.lodManager.getStats().drawDistance);
+      } else {
+        // If debug mode is disabled, remove the draw distance indicator
+        this.gameMap.removeDrawDistanceIndicator();
+      }
     }
   }
 
@@ -742,5 +820,50 @@ export class GameEngine {
     
     // Setup medipacks
     this.medipackSystem.setupMedipacks(medipackPositions);
+  }
+
+  /**
+   * Register scene objects with the LOD manager for draw distance optimization
+   */
+  private registerObjectsWithLODManager(): void {
+    // Register vegetation and environment objects
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh) {
+        // Skip player meshes and essentials (like skybox)
+        if (object.name.includes('player') || 
+            object.name === 'ground' || 
+            object.name.includes('sky')) {
+          return;
+        }
+        
+        // Determine object type based on name or properties
+        let objectType = 'default';
+        let priority = 0;
+        
+        if (object.name.includes('vegetation')) {
+          objectType = 'vegetation';
+          priority = 1;
+        } else if (object.name.includes('building')) {
+          objectType = 'building';
+          priority = 3;
+        } else if (object instanceof THREE.InstancedMesh) {
+          objectType = 'instancedMesh';
+          priority = 2;
+        }
+        
+        // Register with LOD manager
+        this.lodManager.registerObject(
+          object.id.toString(),
+          object,
+          {
+            objectType,
+            priority,
+            userData: {}
+          }
+        );
+      }
+    });
+    
+    console.log('Registered objects with LOD manager for draw distance optimization');
   }
 } 
