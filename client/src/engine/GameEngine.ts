@@ -178,7 +178,7 @@ export class GameEngine {
     this.setupMedipacks();
 
     // Initialize LOD manager for draw distance optimization
-    this.lodManager = new LODManager(this.scene, this.camera, {
+    this.lodManager = new LODManager(this.camera, {
       maxDrawDistance: 1000,
       updateInterval: 300  // Update LOD every 300ms for better responsiveness
     });

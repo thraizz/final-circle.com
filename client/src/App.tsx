@@ -19,6 +19,7 @@ function App() {
     showGameTime: true,
     showPlayerCount: true,
     showCrosshair: true,
+    debugMode: true,
   })
 
   const handleLogin = (name: string) => {

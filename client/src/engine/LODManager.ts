@@ -5,10 +5,8 @@ import * as THREE from 'three';
  * to improve rendering performance by:
  * 1. Avoiding rendering objects that are too far from the camera
  * 2. Using different detail levels for objects based on distance
- * 3. Dynamically managing object visibility and frustum culling
  */
 export class LODManager {
-  private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   
   // Object tracking for LOD management
@@ -30,12 +28,7 @@ export class LODManager {
   private lastUpdateTime: number = 0;
   private updateInterval: number = 500; // Update LOD every 500ms
   
-  // Frustum culling
-  private frustum: THREE.Frustum = new THREE.Frustum();
-  private projScreenMatrix: THREE.Matrix4 = new THREE.Matrix4();
-  
-  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, config?: LODConfig) {
-    this.scene = scene;
+  constructor(camera: THREE.PerspectiveCamera, config?: LODConfig) {
     this.camera = camera;
     
     // Apply custom configuration if provided
@@ -123,13 +116,6 @@ export class LODManager {
     
     this.lastUpdateTime = currentTime;
     
-    // Update frustum for culling
-    this.projScreenMatrix.multiplyMatrices(
-      this.camera.projectionMatrix, 
-      this.camera.matrixWorldInverse
-    );
-    this.frustum.setFromProjectionMatrix(this.projScreenMatrix);
-    
     this.hiddenObjectCount = 0;
     this.visibleObjectCount = 0;
     
@@ -143,6 +129,13 @@ export class LODManager {
       // Skip if object no longer exists
       if (!object) {
         this.trackedObjects.delete(id);
+        return;
+      }
+      
+      // Make essential objects always visible
+      if (object.name === 'ground') {
+        object.visible = true;
+        this.visibleObjectCount++;
         return;
       }
       
@@ -160,11 +153,8 @@ export class LODManager {
         const lodLevel = this.determineLODLevel(distance);
         trackedObj.lodLevel = lodLevel;
         
-        // Check if object is in frustum
-        const isInFrustum = this.isInFrustum(object);
-        
-        // Update visibility based on frustum and distance
-        object.visible = isInFrustum && trackedObj.originalVisible;
+        // Update visibility based on distance
+        object.visible = trackedObj.originalVisible;
         
         if (object.visible) {
           this.visibleObjectCount++;
@@ -190,21 +180,6 @@ export class LODManager {
       }
     }
     return 0; // Default to highest detail
-  }
-  
-  /**
-   * Check if an object is in the camera frustum
-   * @param object The object to check
-   * @returns True if the object is in the frustum
-   */
-  private isInFrustum(object: THREE.Object3D): boolean {
-    // For performance, we'll use a bounding sphere approach
-    const boundingSphere = new THREE.Sphere(
-      object.position.clone(),
-      object.scale.length() * 5 // Approximate radius based on scale
-    );
-    
-    return this.frustum.intersectsSphere(boundingSphere);
   }
   
   /**

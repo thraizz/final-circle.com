@@ -136,6 +136,7 @@ export class GameMap {
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.position.y = -1;
     this.ground.receiveShadow = true;
+    this.ground.name = "ground";
     
     // Add the ground to the scene
     this.scene.add(this.ground);
