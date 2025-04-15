@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "client": "cd client && npm run dev",
-    "server": "cd server && go run main.go",
+    "server": "cd server && PORT=8001 go run main.go",
     "dev": "concurrently \"npm run server\" \"npm run client\""
   },
   "devDependencies": {
