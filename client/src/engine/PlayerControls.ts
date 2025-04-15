@@ -546,6 +546,9 @@ export class PlayerControls {
         // Subtract the normal component to get a sliding velocity
         this.velocity.sub(tempVector);
         
+        // Scale the velocity for smoother sliding
+        this.velocity.multiplyScalar(0.9);
+        
         // Apply the sliding velocity
         PlayerControls.newPosition.copy(this.player.position);
         PlayerControls.newPosition.x += this.velocity.x * deltaTime;
@@ -553,15 +556,22 @@ export class PlayerControls {
         PlayerControls.newPosition.y += this.velocity.y * deltaTime;
         PlayerControls.newPosition.z += this.velocity.z * deltaTime;
         
+        // Add a small push in the normal direction to prevent sticking to walls
+        const pushDistance = 0.01;
+        PlayerControls.newPosition.x += collisionInfo.normal.x * pushDistance;
+        PlayerControls.newPosition.z += collisionInfo.normal.z * pushDistance;
+        
         // Check if the new sliding position is valid
         const slideCollision = this.checkCollision(PlayerControls.newPosition);
         if (!slideCollision.collided) {
           this.player.position.copy(PlayerControls.newPosition);
         } else {
-          // If still colliding, just preserve the Y position and stop horizontal movement
+          // If still colliding, just preserve the Y position and reduce horizontal movement instead of stopping
           this.player.position.y += this.velocity.y * deltaTime;
-          this.velocity.x = 0;
-          this.velocity.z = 0;
+          
+          // Reduce velocity instead of setting to zero to allow for smoother movement
+          this.velocity.x *= 0.5;
+          this.velocity.z *= 0.5;
         }
       } else {
         // Fallback to simple collision response if no normal calculated
@@ -574,7 +584,9 @@ export class PlayerControls {
   }
 
   private checkCollision(newPosition: Vector3): CollisionInfo {
-    // Create player bounding box
+    // Create player bounding box with a slightly reduced size to allow closer proximity to objects
+    const collisionMargin = 0.85; // Scale down the collision box to 85% of original size
+
     PlayerControls.playerBox.setFromCenterAndSize(
       new THREE.Vector3(
         newPosition.x,
@@ -582,9 +594,9 @@ export class PlayerControls {
         newPosition.z
       ),
       new THREE.Vector3(
-        this.playerRadius * 2,
-        this.playerHeight,
-        this.playerRadius * 2
+        this.playerRadius * 2 * collisionMargin,
+        this.playerHeight * collisionMargin,
+        this.playerRadius * 2 * collisionMargin
       )
     );
     
@@ -638,6 +650,9 @@ export class PlayerControls {
           penetration = overlapZ;
           normal.set(0, 0, Math.sign(playerCenter.z - obstacleCenter.z));
         }
+        
+        // Apply a small reduction to the penetration to allow player to get closer to objects
+        penetration *= 0.9;
         
         return {
           collided: true,
