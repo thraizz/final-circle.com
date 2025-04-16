@@ -124,6 +124,25 @@ export class PlayerControls {
   }
 
   /**
+   * Disable player controls
+   */
+  public disableControls(): void {
+    console.log("Disabling player controls");
+    this.controlsEnabled = false;
+    
+    // Reset movement flags
+    this.moveForward = false;
+    this.moveBackward = false;
+    this.moveLeft = false;
+    this.moveRight = false;
+    this.isLeaningLeft = false;
+    this.isLeaningRight = false;
+    
+    // Stop any ongoing actions
+    this.stopShooting();
+  }
+
+  /**
    * Check if controls are enabled
    */
   public areControlsEnabled(): boolean {
@@ -362,7 +381,9 @@ export class PlayerControls {
         direction: shot.direction,
         hitObstacle: shot.hitObstacle,
         hitPoint: shot.hitPoint,
-        hitDistance: shot.hitDistance
+        hitDistance: shot.hitDistance,
+        weaponId: shot.weapon.type,
+        damage: shot.weapon.stats.damage
       },
     });
   }
@@ -394,36 +415,47 @@ export class PlayerControls {
   }
 
   public update(deltaTime: number): void {
-    if (!this.pointerLocked) return;
+    // Don't process controls if not enabled
+    if (!this.controlsEnabled) {
+      return;
+    }
+    
+    // Update weapon system
+    this.weaponSystem.update(deltaTime);
+    
+    // Process leaning
+    this.updateLean(deltaTime);
+    
+    // Only process the rest of movement if pointer is locked (player has control)
+    if (!this.pointerLocked) {
+      return;
+    }
     
     // Store previous position
     this.lastPosition.copy(this.player.position);
-    
-    // Update leaning
-    this.updateLean(deltaTime);
     
     // Calculate movement direction
     PlayerControls.moveDirection.set(0, 0, 0);
     
     if (this.moveForward) {
-      PlayerControls.moveDirection.z = -1;
+      PlayerControls.moveDirection.z -= 1;
     }
     if (this.moveBackward) {
-      PlayerControls.moveDirection.z = 1;
+      PlayerControls.moveDirection.z += 1;
     }
     if (this.moveLeft) {
-      PlayerControls.moveDirection.x = -1;
+      PlayerControls.moveDirection.x -= 1;
     }
     if (this.moveRight) {
-      PlayerControls.moveDirection.x = 1;
+      PlayerControls.moveDirection.x += 1;
     }
     
-    // Normalize movement direction
+    // Normalize movement vector for consistent speed in all directions
     if (PlayerControls.moveDirection.length() > 0) {
       PlayerControls.moveDirection.normalize();
     }
     
-    // Apply rotation to movement direction - use cameraRotation instead of player.rotation
+    // Apply camera rotation to movement direction
     PlayerControls.moveDirection.applyEuler(
       PlayerControls.rotationEuler.set(0, this.cameraRotation.y, 0)
     );
@@ -578,9 +610,6 @@ export class PlayerControls {
         this.velocity.set(0, this.velocity.y, 0);
       }
     }
-    
-    // Update weapon system
-    this.weaponSystem.update(deltaTime);
   }
 
   private checkCollision(newPosition: Vector3): CollisionInfo {

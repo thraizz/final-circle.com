@@ -40,6 +40,7 @@ export class HUD {
   private lastFrameTime: number;
   private errorMessageTimeout: number | null = null;
   private lowHealthAnimationId: number | null = null;
+  private messageTimeout: number | null = null;
   
   constructor(config?: Partial<HUDConfig>) {
     // Default configuration
@@ -115,7 +116,7 @@ export class HUD {
     // Create death overlay
     this.deathOverlay = document.createElement('div');
     this.deathOverlay.className = 'death-overlay';
-    this.deathOverlay.innerHTML = '<div class="death-message">YOU DIED</div>';
+    this.deathOverlay.innerHTML = '<div class="death-message">YOU DIED</div><div class="death-submessage">No respawn until next round</div>';
     this.deathOverlay.style.display = 'none';
     document.body.appendChild(this.deathOverlay);
     
@@ -186,6 +187,24 @@ export class HUD {
         text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
         backdrop-filter: blur(2px);
         transition: opacity 0.2s ease;
+      }
+      
+      .hud-message {
+        position: fixed;
+        top: 20%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        font-size: 24px;
+        font-weight: bold;
+        text-align: center;
+        z-index: 2000;
+        pointer-events: none;
+        opacity: 0.9;
+        transition: opacity 0.3s ease;
       }
       
       .crosshair {
@@ -313,6 +332,7 @@ export class HUD {
         background-color: rgba(255, 0, 0, 0.3);
         z-index: 2000;
         display: flex;
+        flex-direction: column;
         justify-content: center;
         align-items: center;
         pointer-events: none;
@@ -323,6 +343,14 @@ export class HUD {
         font-weight: bold;
         color: #ffffff;
         text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+      }
+      
+      .death-submessage {
+        font-size: 24px;
+        font-weight: bold;
+        color: #ffffff;
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        margin-top: 15px;
       }
       
       .low-health-overlay {
@@ -817,5 +845,33 @@ export class HUD {
     });
     
     this.debugDisplay.innerHTML = debugText;
+  }
+  
+  public showMessage(message: string, duration: number = 3000): void {
+    // Create or get the message display element
+    let messageDisplay = document.getElementById('hud-message');
+    
+    if (!messageDisplay) {
+      messageDisplay = document.createElement('div');
+      messageDisplay.id = 'hud-message';
+      messageDisplay.className = 'hud-message';
+      document.body.appendChild(messageDisplay);
+    }
+    
+    // Set the message text
+    messageDisplay.textContent = message;
+    messageDisplay.style.display = 'block';
+    
+    // Clear any existing timeout
+    if (this.messageTimeout) {
+      clearTimeout(this.messageTimeout);
+    }
+    
+    // Hide the message after the specified duration
+    this.messageTimeout = window.setTimeout(() => {
+      if (messageDisplay) {
+        messageDisplay.style.display = 'none';
+      }
+    }, duration);
   }
 } 

@@ -373,25 +373,45 @@ export class GameMap {
     // Enhanced vegetation using InstancedMesh for better performance
     const vegetationTypes = [
       {
-        geometry: new THREE.ConeGeometry(1.5, 4, 6),
+        geometry: new THREE.ConeGeometry(1.5, 4, 8),  // Increased segments for smoother trees
         baseScale: [1.2, 1.8, 1.2],
-        count: 2000,
-        heightRange: [3, 5],
-        name: 'pine'
+        count: 1500,  // Reduced count for better performance
+        heightRange: [3, 6],  // Increased max height for more variety
+        name: 'pine',
+        color: 0x2D5F1E  // Medium green
       },
       {
-        geometry: new THREE.SphereGeometry(2, 6, 4),
+        geometry: new THREE.SphereGeometry(2, 8, 6),  // Improved geometry
         baseScale: [1.2, 1, 1.2],
-        count: 1000,
-        heightRange: [1.5, 2.5],
-        name: 'bush'
+        count: 800,
+        heightRange: [1.5, 2.8],  // Increased height range
+        name: 'bush',
+        color: 0x3A6B2A  // Slightly lighter green
       },
       {
-        geometry: new THREE.CylinderGeometry(0.3, 0.3, 4, 4),
+        geometry: new THREE.CylinderGeometry(0.3, 0.3, 4, 6),  // Improved geometry
         baseScale: [1, 1.2, 1],
-        count: 500,
-        heightRange: [3, 4],
-        name: 'trunk'
+        count: 400,
+        heightRange: [3, 4.5],  // Increased height range
+        name: 'trunk',
+        color: 0x4D3319  // Brown for trunks
+      },
+      // New vegetation types
+      {
+        geometry: new THREE.DodecahedronGeometry(1.8, 0),  // Low poly rock as ground cover
+        baseScale: [1.0, 0.4, 1.0],
+        count: 600,
+        heightRange: [0.2, 0.6],
+        name: 'rock',
+        color: 0x808080  // Gray color
+      },
+      {
+        geometry: new THREE.ConeGeometry(1.8, 5, 7),  // Larger conifers
+        baseScale: [1.4, 2.0, 1.4],
+        count: 600,
+        heightRange: [5, 8],
+        name: 'tall-pine',
+        color: 0x1F4F0F  // Darker green
       }
     ];
     
@@ -400,10 +420,17 @@ export class GameMap {
     const rotation = new THREE.Euler();
     const scale = new THREE.Vector3();
     
-    vegetationTypes.forEach(({ geometry, baseScale, count, heightRange, name }) => {
+    vegetationTypes.forEach(({ geometry, baseScale, count, heightRange, name, color }) => {
+      // Create custom material for each vegetation type for more variety
+      const vegMaterial = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.9,
+        metalness: 0.1
+      });
+      
       const instancedMesh = new THREE.InstancedMesh(
         geometry,
-        this.materials.vegetation,
+        vegMaterial,
         count
       );
       instancedMesh.castShadow = true;
@@ -411,26 +438,48 @@ export class GameMap {
       instancedMesh.name = `vegetation-${name}`;
       
       // Create individual meshes for each vegetation instance for proper raycasting
-      const actualInstanceCount = Math.min(count, 300); // Limit to a reasonable number to avoid performance issues
+      const actualInstanceCount = Math.min(count, 200); // Further limit to improve performance
       const vegetationMeshes: THREE.Mesh[] = [];
       
-      for (let i = 0; i < count; i++) {
+      // Create clusters of vegetation for more natural distribution
+      const clusterCount = Math.floor(count / 20); // Each cluster has roughly 20 items
+      const clusterPositions: { x: number, z: number }[] = [];
+      
+      // Generate cluster center points
+      for (let c = 0; c < clusterCount; c++) {
         const angle = (Math.random() * Math.PI * 2);
-        const minRadius = 100;
+        const minRadius = 150;
         const maxRadius = ringWallRadius * 0.98;
-        const baseRadius = minRadius + Math.random() * (maxRadius - minRadius);
-        const densityFactor = Math.pow((baseRadius - minRadius) / (maxRadius - minRadius), 0.7);
+        const radius = minRadius + Math.random() * (maxRadius - minRadius);
+        
+        clusterPositions.push({
+          x: Math.cos(angle) * radius,
+          z: Math.sin(angle) * radius
+        });
+      }
+      
+      for (let i = 0; i < count; i++) {
+        // Pick a random cluster to place this vegetation in
+        const cluster = clusterPositions[Math.floor(Math.random() * clusterPositions.length)];
+        const clusterSpread = name === 'rock' ? 30 : 60; // Rocks are more tightly clustered
+        
+        // Position within cluster plus some randomness
+        const x = cluster.x + (Math.random() - 0.5) * clusterSpread;
+        const z = cluster.z + (Math.random() - 0.5) * clusterSpread;
+        
+        // Calculate distance from center for density distribution
+        const distFromCenter = Math.sqrt(x * x + z * z);
+        const minRadius = 150;
+        const maxRadius = ringWallRadius * 0.98;
+        const densityFactor = Math.pow((distFromCenter - minRadius) / (maxRadius - minRadius), 0.7);
         
         // Higher probability of placement in outer areas
         if (Math.random() < (0.4 + densityFactor * 0.6)) {
-          const x = Math.cos(angle) * baseRadius;
-          const z = Math.sin(angle) * baseRadius;
-          
           // Randomize position within the area
           position.set(
-            x + (Math.random() - 0.5) * 40,
+            x + (Math.random() - 0.5) * 20,
             heightRange[0] + Math.random() * (heightRange[1] - heightRange[0]),
-            z + (Math.random() - 0.5) * 40
+            z + (Math.random() - 0.5) * 20
           );
           
           // Randomize rotation
@@ -440,12 +489,12 @@ export class GameMap {
             Math.random() * 0.2
           );
           
-          // Scale based on distance from center
-          const scaleFactor = 1.2 + (densityFactor * 0.6);
+          // Scale based on distance from center and add some randomness
+          const scaleFactor = 0.8 + (densityFactor * 0.6);
           scale.set(
-            baseScale[0] * scaleFactor * (0.8 + Math.random() * 0.4),
-            baseScale[1] * scaleFactor * (0.9 + Math.random() * 0.2),
-            baseScale[2] * scaleFactor * (0.8 + Math.random() * 0.4)
+            baseScale[0] * scaleFactor * (0.8 + Math.random() * 0.5),
+            baseScale[1] * scaleFactor * (0.9 + Math.random() * 0.3),
+            baseScale[2] * scaleFactor * (0.8 + Math.random() * 0.5)
           );
           
           matrix.compose(position, new THREE.Quaternion().setFromEuler(rotation), scale);
@@ -454,7 +503,7 @@ export class GameMap {
           // For raycasting, create individual meshes for a subset of vegetation
           if (i < actualInstanceCount) {
             // Create an actual mesh for raycasting
-            const vegetationMesh = new THREE.Mesh(geometry.clone(), this.materials.vegetation);
+            const vegetationMesh = new THREE.Mesh(geometry.clone(), vegMaterial);
             vegetationMesh.position.copy(position);
             vegetationMesh.rotation.copy(rotation);
             vegetationMesh.scale.copy(scale);

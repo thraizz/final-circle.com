@@ -30,6 +30,7 @@ export interface PlayerActionData {
   hitObstacle?: boolean;
   hitPoint?: Vector3;
   hitDistance?: number;
+  damage?: number;     // Weapon damage amount
 }
 
 export type PlayerActionType = 'move' | 'jump' | 'shoot' | 'reload' | 'switchWeapon';

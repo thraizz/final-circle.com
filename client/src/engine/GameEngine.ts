@@ -404,6 +404,21 @@ export class GameEngine {
   }
 
   private updateGameState(): void {
+    // Check player alive state first - if we have a player ID
+    if (this.playerId && this.gameState.players[this.playerId]) {
+      const playerData = this.gameState.players[this.playerId];
+      
+      // If player is dead and not in spectator mode, switch to spectator mode
+      if (!playerData.isAlive && !this.isSpectatorMode) {
+        this.toggleSpectatorMode();
+      }
+      
+      // If player is alive and in spectator mode, switch back to player mode
+      if (playerData.isAlive && this.isSpectatorMode) {
+        this.toggleSpectatorMode();
+      }
+    }
+    
     // Check for kills first - only if we have a player ID
     if (this.playerId && this.gameState.players[this.playerId]) {
       const currentKills = this.gameState.players[this.playerId].kills;
@@ -741,11 +756,19 @@ export class GameEngine {
       // Switch to spectator mode
       this.isSpectatorMode = true;
       if (this.playerControls) {
+        this.playerControls.disableControls();
         this.playerControls.cleanup();
       }
       
       // Create spectator controls
       this.spectatorControls = new SpectatorControls(this.camera);
+      
+      // Check if player is dead
+      if (this.playerId && this.gameState.players[this.playerId] && !this.gameState.players[this.playerId].isAlive) {
+        this.hud.showMessage("You died! Spectating until next round", 5000);
+      } else {
+        this.hud.showMessage("Spectator Mode", 3000);
+      }
     }
   }
 

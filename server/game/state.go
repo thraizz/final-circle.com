@@ -235,9 +235,9 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 		// Could add jump mechanics here
 	case "shoot":
 		if action.Data.Target != nil {
-			sm.HandleShot(id, *action.Data.Target)
+			sm.HandleShot(id, *action.Data.Target, action.Data.Damage)
 		} else if action.Data.Direction != nil {
-			sm.HandleDirectionalShot(id, *action.Data.Direction)
+			sm.HandleDirectionalShot(id, *action.Data.Direction, action.Data.Damage)
 		}
 	case "reload":
 		// Reload is handled client-side for now
@@ -252,7 +252,7 @@ func (sm *StateManager) HandlePlayerAction(id string, action types.PlayerAction)
 }
 
 // HandleShot handles a player's shot
-func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
+func (sm *StateManager) HandleShot(shooterId string, target types.Vector3, damagePtr *int) {
 	shooter := sm.state.Players[shooterId]
 	hitRegistered := false
 
@@ -352,11 +352,17 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 	if closestHitPlayer != nil {
 		oldHealth := closestHitPlayer.Health
 
-		// Reduce health
-		closestHitPlayer.Health -= 25 // 4 shots to kill
+		// Get damage from the action payload if available
+		damage := 20 // Default damage as fallback
+		if damagePtr != nil {
+			damage = *damagePtr
+		}
 
-		logger.DebugLogger.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
-			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance)
+		// Reduce health
+		closestHitPlayer.Health -= damage
+
+		logger.DebugLogger.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f, damage: %d)",
+			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance, damage)
 
 		hitRegistered = true
 
@@ -370,26 +376,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 			logger.InfoLogger.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
 				closestHitPlayerId, shooterId, shooter.Kills, closestHitPlayer.Deaths)
 
-			// Respawn player after 3 seconds
-			go func(playerId string) {
-				logger.DebugLogger.Printf("Player %s will respawn in 3 seconds", playerId)
-				time.Sleep(3 * time.Second)
-				sm.mu.Lock()
-				defer sm.mu.Unlock()
-
-				// Make sure player still exists
-				if p, exists := sm.state.Players[playerId]; exists {
-					spawnPoint := sm.getRandomSpawnPoint()
-					p.IsAlive = true
-					p.Health = 100
-					p.Position = spawnPoint
-					logger.InfoLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f), distance from center: %.2f",
-						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z,
-						math.Sqrt(spawnPoint.X*spawnPoint.X+spawnPoint.Z*spawnPoint.Z))
-				} else {
-					logger.InfoLogger.Printf("Player %s disconnected while waiting to respawn", playerId)
-				}
-			}(closestHitPlayerId)
+			// No automatic respawn - players stay dead until the next round
 		}
 	}
 
@@ -401,7 +388,7 @@ func (sm *StateManager) HandleShot(shooterId string, target types.Vector3) {
 }
 
 // HandleDirectionalShot handles a shot fired with a direction vector
-func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.Vector3) {
+func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.Vector3, damagePtr *int) {
 	shooter := sm.state.Players[shooterId]
 	hitRegistered := false
 
@@ -494,11 +481,17 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 	if closestHitPlayer != nil {
 		oldHealth := closestHitPlayer.Health
 
-		// Reduce health
-		closestHitPlayer.Health -= 25 // 4 shots to kill
+		// Get damage from the action payload if available
+		damage := 20 // Default damage as fallback
+		if damagePtr != nil {
+			damage = *damagePtr
+		}
 
-		logger.DebugLogger.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f)",
-			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance)
+		// Reduce health based on damage
+		closestHitPlayer.Health -= damage
+
+		logger.DebugLogger.Printf("Player %s hit player %s (health: %d -> %d, distance: %.2f, damage: %d)",
+			shooterId, closestHitPlayerId, oldHealth, closestHitPlayer.Health, closestDistance, damage)
 
 		hitRegistered = true
 
@@ -512,26 +505,7 @@ func (sm *StateManager) HandleDirectionalShot(shooterId string, direction types.
 			logger.InfoLogger.Printf("Player %s killed by %s (kills: %d, deaths: %d)",
 				closestHitPlayerId, shooterId, shooter.Kills, closestHitPlayer.Deaths)
 
-			// Respawn player after 3 seconds
-			go func(playerId string) {
-				logger.DebugLogger.Printf("Player %s will respawn in 3 seconds", playerId)
-				time.Sleep(3 * time.Second)
-				sm.mu.Lock()
-				defer sm.mu.Unlock()
-
-				// Make sure player still exists
-				if p, exists := sm.state.Players[playerId]; exists {
-					spawnPoint := sm.getRandomSpawnPoint()
-					p.IsAlive = true
-					p.Health = 100
-					p.Position = spawnPoint
-					logger.InfoLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f), distance from center: %.2f",
-						playerId, spawnPoint.X, spawnPoint.Y, spawnPoint.Z,
-						math.Sqrt(spawnPoint.X*spawnPoint.X+spawnPoint.Z*spawnPoint.Z))
-				} else {
-					logger.InfoLogger.Printf("Player %s disconnected while waiting to respawn", playerId)
-				}
-			}(closestHitPlayerId)
+			// No automatic respawn - players stay dead until the next round
 		}
 	}
 
@@ -552,8 +526,23 @@ func (sm *StateManager) StartGame() error {
 		return types.ErrGameNotActive
 	}
 
+	// Respawn all players at the start of a new round
+	for id, player := range sm.state.Players {
+		// Reset player health
+		player.Health = 100
+		player.IsAlive = true
+
+		// Assign a random spawn point
+		spawnPoint := sm.getRandomSpawnPoint()
+		player.Position = spawnPoint
+
+		logger.InfoLogger.Printf("Player %s respawned at position (%.2f, %.2f, %.2f) for new round",
+			id, spawnPoint.X, spawnPoint.Y, spawnPoint.Z)
+	}
+
 	sm.state.IsGameActive = true
 	sm.state.GameTime = 0
+	sm.state.MatchID = generateMatchID()
 	logger.InfoLogger.Printf("Game started: %s with %d players", sm.state.MatchID, len(sm.state.Players))
 	return nil
 }

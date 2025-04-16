@@ -59,6 +59,7 @@ type PlayerAction struct {
 		HitDistance *float64 `json:"hitDistance,omitempty"`
 		Amount      *int     `json:"amount,omitempty"`    // For healing amount
 		NewHealth   *int     `json:"newHealth,omitempty"` // New health after healing
+		Damage      *int     `json:"damage,omitempty"`    // Damage from weapon used
 	} `json:"data"`
 }
 
